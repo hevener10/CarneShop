@@ -3,7 +3,9 @@
 use App\Http\Controllers\Api\Admin\AuthController;
 use App\Http\Controllers\Api\Admin\PlanController;
 use App\Http\Controllers\Api\Admin\StoreController;
+use App\Http\Controllers\Api\Public\StorefrontController;
 use App\Http\Controllers\Api\Store\CategoryController;
+use App\Http\Controllers\Api\Store\OrderController;
 use App\Http\Controllers\Api\Store\ProductController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +23,19 @@ Route::prefix('v1')->group(function () {
     Route::prefix('public')->group(function () {
         // Verificar disponibilidade de slug
         Route::get('/stores/check-slug/{slug}', [StoreController::class, 'checkSlug']);
+
+        // Loja pública (subdomain)
+        Route::prefix('stores/{subdomain}')->group(function () {
+            Route::get('/', [StorefrontController::class, 'show']);
+            Route::get('/categories', [StorefrontController::class, 'categories']);
+            Route::get('/products', [StorefrontController::class, 'products']);
+            Route::get('/products/{slug}', [StorefrontController::class, 'product']);
+            Route::get('/kits', [StorefrontController::class, 'kits']);
+            Route::get('/banners', [StorefrontController::class, 'banners']);
+            Route::get('/neighborhoods', [StorefrontController::class, 'neighborhoods']);
+            Route::post('/delivery/calculate', [StorefrontController::class, 'calculateDelivery']);
+            Route::post('/checkout', [StorefrontController::class, 'checkout']);
+        });
     });
 
     // ============================================
@@ -77,5 +92,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/variations', [ProductController::class, 'storeVariation']);
         Route::put('/products/{product}/variations/{variation}', [ProductController::class, 'updateVariation']);
         Route::delete('/products/{product}/variations/{variation}', [ProductController::class, 'destroyVariation']);
+
+        // Pedidos
+        Route::apiResource('orders', OrderController::class);
+        Route::put('/orders/{order}/status', [OrderController::class, 'updateStatus']);
+        Route::get('/orders/{order}/whatsapp', [OrderController::class, 'whatsappMessage']);
+        Route::get('/stats', [OrderController::class, 'stats']);
     });
 });
