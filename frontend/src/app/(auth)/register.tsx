@@ -3,33 +3,37 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvo
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const router = useRouter();
-  const { login, isLoading } = useAuthStore();
+  const { register, isLoading } = useAuthStore();
   
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const handleRegister = async () => {
+    if (!name || !email || !password || !passwordConfirm) {
       Alert.alert('Erro', 'Preencha todos os campos');
       return;
     }
 
+    if (password !== passwordConfirm) {
+      Alert.alert('Erro', 'As senhas não conferem');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Erro', 'A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
     try {
-      await login(email, password);
-      
-      // Redirect based on role
-      const { user } = useAuthStore.getState();
-      if (user?.role === 'super_admin') {
-        router.replace('/(admin)');
-      } else if (user?.role === 'store_owner') {
-        router.replace('/(admin)');
-      } else {
-        router.replace('/(store)');
-      }
+      await register({ name, email, password });
+      Alert.alert('Sucesso', 'Conta criada com sucesso!');
+      router.replace('/(admin)');
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao fazer login';
+      const message = error.response?.data?.message || 'Erro ao criar conta';
       Alert.alert('Erro', message);
     }
   };
@@ -42,11 +46,20 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.logo}>🦔</Text>
-          <Text style={styles.title}>CarneShop</Text>
-          <Text style={styles.subtitle}>Sistema de Delivery de Carnes</Text>
+          <Text style={styles.title}>Criar Conta</Text>
+          <Text style={styles.subtitle}>Junte-se ao CarneShop</Text>
         </View>
 
         <View style={styles.form}>
+          <Text style={styles.label}>Nome completo</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Seu nome"
+            autoCapitalize="words"
+          />
+
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
@@ -67,22 +80,31 @@ export default function LoginScreen() {
             secureTextEntry
           />
 
+          <Text style={styles.label}>Confirmar senha</Text>
+          <TextInput
+            style={styles.input}
+            value={passwordConfirm}
+            onChangeText={setPasswordConfirm}
+            placeholder="••••••••"
+            secureTextEntry
+          />
+
           <TouchableOpacity 
             style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleRegister}
             disabled={isLoading}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Entrando...' : 'Entrar'}
+              {isLoading ? 'Criando...' : 'Criar Conta'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.linkButton}
-            onPress={() => router.push('/(auth)/register')}
+            onPress={() => router.back()}
           >
             <Text style={styles.linkText}>
-              Não tem conta? <Text style={styles.linkBold}>Cadastre-se</Text>
+              Já tem conta? <Text style={styles.linkBold}>Entrar</Text>
             </Text>
           </TouchableOpacity>
         </View>
