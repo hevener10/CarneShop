@@ -126,7 +126,7 @@ class Product extends Model
 
     public function observations()
     {
-        return $this->store->productObservations();
+        return $this->hasMany(ProductObservation::class, 'store_id', 'store_id');
     }
 
     public function orderItems()

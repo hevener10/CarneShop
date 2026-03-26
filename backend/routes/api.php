@@ -94,7 +94,10 @@ Route::prefix('v1')->group(function () {
         Route::delete('/products/{product}/variations/{variation}', [ProductController::class, 'destroyVariation']);
 
         // Pedidos
-        Route::apiResource('orders', OrderController::class);
+        Route::get('/orders', [OrderController::class, 'index']);
+        Route::get('/orders/{id}', [OrderController::class, 'show']);
+        Route::put('/orders/{id}', [OrderController::class, 'update']);
+        Route::delete('/orders/{id}', [OrderController::class, 'destroy']);
         Route::put('/orders/{order}/status', [OrderController::class, 'updateStatus']);
         Route::get('/orders/{order}/whatsapp', [OrderController::class, 'whatsappMessage']);
         Route::get('/stats', [OrderController::class, 'stats']);

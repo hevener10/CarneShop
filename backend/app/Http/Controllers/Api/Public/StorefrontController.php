@@ -15,7 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class StoreController extends Controller
+class StorefrontController extends Controller
 {
     /**
      * Ver dados públicos da loja

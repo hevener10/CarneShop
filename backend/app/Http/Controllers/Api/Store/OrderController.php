@@ -139,6 +139,31 @@ class OrderController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $store = $request->user()->store;
+
+        $order = Order::where('store_id', $store->id)->findOrFail($id);
+
+        if (!$order->canBeCanceled()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Este pedido não pode ser excluído.',
+            ], 422);
+        }
+
+        $order->update([
+            'status' => Order::STATUS_CANCELED,
+            'cancellation_reason' => 'Cancelado pelo estabelecimento',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => $order->fresh(),
+            'message' => 'Pedido cancelado com sucesso',
+        ]);
+    }
+
     /**
      * Estatísticas de pedidos
      */

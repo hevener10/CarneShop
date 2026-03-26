@@ -122,6 +122,11 @@ class Store extends Model
         return $this->hasMany(Neighborhood::class);
     }
 
+    public function productObservations()
+    {
+        return $this->hasMany(ProductObservation::class);
+    }
+
     public function subscriptions()
     {
         return $this->hasMany(Subscription::class);

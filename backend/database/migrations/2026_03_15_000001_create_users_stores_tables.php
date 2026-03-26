@@ -44,7 +44,7 @@ return new class extends Migration
             $table->id();
             $table->uuid('uuid')->unique();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('plan_id')->default(1)->constrained();
+            $table->foreignId('plan_id')->constrained();
             $table->string('name');
             $table->string('slug')->unique(); // subdomain
             $table->string('description')->nullable();
