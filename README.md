@@ -1,6 +1,6 @@
 # CarneShop 🦔
 
-> Sistema de Delivery de Carnes SaaS - Plataforma multi-tenant para açougues e churrascarias
+> Sistema SaaS de Delivery de Carnes - Plataforma multi-tenant para açougues e churrascarias
 
 ## 📋 Documentação
 
@@ -24,3 +24,12 @@ Consulte o arquivo [SPEC.md](./SPEC.md) para todas as especificações do projet
 ## 📄 Licença
 
 MIT License
+
+## 🚧 Em Desenvolvimento
+
+Este projeto está em desenvolvimento. Status atual:
+- [x] Estrutura inicial do projeto
+- [x] Migrations do banco de dados
+- [ ] Models Eloquent
+- [ ] Controllers e rotas API
+- [ ] Frontend React Native
