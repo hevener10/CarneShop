@@ -29,7 +29,7 @@ class PlanSeeder extends Seeder
                 'description' => 'Para negócios em crescimento. Domínio próprio.',
                 'price' => 49.90,
                 'limit_products' => 200,
-                'limit_categories' => null, // ilimitado
+                'limit_categories' => null,
                 'has_domain' => true,
                 'has_api' => false,
                 'is_active' => true,
@@ -39,8 +39,8 @@ class PlanSeeder extends Seeder
                 'name' => 'Premium',
                 'description' => 'Para negócios estabelecidos. Tudo ilimitado + API.',
                 'price' => 99.90,
-                'limit_products' => null, // ilimitado
-                'limit_categories' => null, // ilimitado
+                'limit_products' => null,
+                'limit_categories' => null,
                 'has_domain' => true,
                 'has_api' => true,
                 'is_active' => true,
