@@ -1,0 +1,42 @@
+.env
+.env.backup
+.env.production
+
+/vendor/
+/node_modules/
+/*.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+/storage/logs/*
+!/storage/logs/.gitignore
+
+# Cache
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# Testing
+.phpunit.result.cache
+coverage/
+
+# Misc
+*.bak
+*.tmp
+backend_skeleton_tmp/
+/backend_skeleton_tmp/
+backend_skeleton_tmp/*
+/backend_skeleton_tmp/*
+
+idea/
+/idea/
+idea/*
+/idea/*
