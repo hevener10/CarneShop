@@ -11,7 +11,7 @@ interface AuthState {
   
   // Actions
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { name: string; email: string; password: string }) => Promise<void>;
+  register: (data: { name: string; email: string; password: string; password_confirmation: string }) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   updateUser: (user: User) => void;
@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  register: async (data: { name: string; email: string; password: string }) => {
+  register: async (data: { name: string; email: string; password: string; password_confirmation: string }) => {
     try {
       const response = await api.register(data);
       

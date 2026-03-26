@@ -21,14 +21,13 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'role' => ['sometimes', 'in:super_admin,store_owner,customer'],
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role' => $validated['role'] ?? 'store_owner',
+            'role' => User::ROLE_STORE_OWNER,
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;

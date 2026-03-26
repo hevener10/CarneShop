@@ -10,6 +10,7 @@ use App\Models\Neighborhood;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ProductVariation;
 use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -265,8 +266,8 @@ class StoreController extends Controller
             'items.*.variation_name' => ['nullable', 'string'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
             'items.*.gramage' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
-            'items.*.subtotal' => ['required', 'numeric', 'min:0'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.subtotal' => ['nullable', 'numeric', 'min:0'],
             'items.*.observations' => ['nullable', 'string'],
 
             // Pagamento
@@ -278,8 +279,7 @@ class StoreController extends Controller
             'neighborhood' => ['nullable', 'string'],
         ]);
 
-        // Calcular entrega
-        $deliveryFee = $validated['delivery_fee'] ?? $store->delivery_fee;
+        $deliveryFee = $store->free_delivery ? 0 : $store->delivery_fee;
         $minimumOrder = $store->minimum_order;
 
         // Verificar bairro
@@ -290,13 +290,62 @@ class StoreController extends Controller
                 ->first();
 
             if ($neighborhood) {
-                $deliveryFee = $neighborhood->delivery_fee;
+                $deliveryFee = $store->free_delivery ? 0 : $neighborhood->delivery_fee;
                 $minimumOrder = $neighborhood->minimum_order ?? $store->minimum_order;
             }
         }
 
-        // Calcular subtotal
-        $subtotal = collect($validated['items'])->sum('subtotal');
+        $productIds = collect($validated['items'])->pluck('product_id')->unique()->values();
+        $products = Product::where('store_id', $store->id)
+            ->whereIn('id', $productIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($products->count() !== $productIds->count()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Um ou mais produtos são inválidos.',
+            ], 422);
+        }
+
+        $calculatedItems = [];
+        $subtotal = 0;
+
+        foreach ($validated['items'] as $item) {
+            $product = $products[$item['product_id']];
+
+            $gramage = $item['gramage'] ?? $product->min_gramage ?? 1000;
+            $quantity = $item['quantity'];
+
+            $variationName = $item['variation_name'] ?? null;
+            $variationAdjust = 0;
+            if ($variationName) {
+                $variationAdjust = (float) (ProductVariation::where('product_id', $product->id)
+                    ->active()
+                    ->where('name', $variationName)
+                    ->value('price_adjust') ?? 0);
+            }
+
+            $basePrice = (float) ($product->discount_price ?? $product->price);
+            $unitPricePerKg = $basePrice + $variationAdjust;
+            $unitPrice = ($unitPricePerKg / 1000) * $gramage;
+            $lineSubtotal = $unitPrice * $quantity;
+
+            $calculatedItems[] = [
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'variation_name' => $variationName,
+                'quantity' => $quantity,
+                'gramage' => $gramage,
+                'unit_price' => round($unitPrice, 2),
+                'subtotal' => round($lineSubtotal, 2),
+                'observations' => $item['observations'] ?? null,
+            ];
+
+            $subtotal += $lineSubtotal;
+        }
+
+        $subtotal = round($subtotal, 2);
 
         // Verificar pedido mínimo
         if ($subtotal < $minimumOrder) {
@@ -329,8 +378,7 @@ class StoreController extends Controller
             'status' => 'pending',
         ]);
 
-        // Criar itens
-        foreach ($validated['items'] as $item) {
+        foreach ($calculatedItems as $item) {
             OrderItem::create([
                 'order_id' => $order->id,
                 'product_id' => $item['product_id'],

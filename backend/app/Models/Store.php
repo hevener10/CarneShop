@@ -143,7 +143,7 @@ class Store extends Model
         $phone = preg_replace('/[^0-9]/', '', $this->whatsapp);
         
         // Adiciona país se não tiver
-        if (strlen($phone) === 10) {
+        if (strlen($phone) === 10 || strlen($phone) === 11) {
             $phone = '55' . $phone;
         }
         

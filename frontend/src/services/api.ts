@@ -65,7 +65,7 @@ class ApiService {
     return response.data;
   }
 
-  public async register(data: { name: string; email: string; password: string }) {
+  public async register(data: { name: string; email: string; password: string; password_confirmation: string }) {
     const response = await this.client.post(ENDPOINTS.register, data);
     if (response.data.token) {
       await SecureStore.setItemAsync('auth_token', response.data.token);

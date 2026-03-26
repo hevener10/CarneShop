@@ -52,16 +52,18 @@ export const useCartStore = create<CartState>()(
           // Update quantity instead
           const newQuantity = existingItem.quantity + 1;
           const newSubtotal = calculateItemSubtotal(product, variation, gramage, newQuantity);
-          
-          set(state => ({
-            items: state.items.map(item => 
-              item.id === itemId 
-                ? { ...item, quantity: newQuantity, subtotal: newSubtotal }
-                : item
-            ),
-            itemCount: state.itemCount + 1,
-            subtotal: calculateSubtotal(get().items),
-          }));
+
+          set(state => {
+            const newItems = state.items.map(item =>
+              item.id === itemId ? { ...item, quantity: newQuantity, subtotal: newSubtotal } : item
+            );
+
+            return {
+              items: newItems,
+              itemCount: state.itemCount + 1,
+              subtotal: calculateSubtotal(newItems),
+            };
+          });
         } else {
           // Calculate price based on gramage
           const unitPrice = product.discount_price || product.price;
@@ -104,6 +106,9 @@ export const useCartStore = create<CartState>()(
         }
         
         set(state => {
+          const currentItem = state.items.find(item => item.id === itemId);
+          const currentQuantity = currentItem?.quantity ?? 0;
+
           const newItems = state.items.map(item => {
             if (item.id === itemId) {
               const newSubtotal = calculateItemSubtotal(
@@ -119,6 +124,7 @@ export const useCartStore = create<CartState>()(
           
           return {
             items: newItems,
+            itemCount: state.itemCount + (quantity - currentQuantity),
             subtotal: calculateSubtotal(newItems),
           };
         });

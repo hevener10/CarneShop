@@ -283,7 +283,7 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               )}
 
-              {selectedOrder?.canBeCanceled() && (
+              {(selectedOrder?.status === 'pending' || selectedOrder?.status === 'confirmed') && (
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: '#F44336' }]}
                   onPress={() => updateStatus(selectedOrder, 'canceled')}
