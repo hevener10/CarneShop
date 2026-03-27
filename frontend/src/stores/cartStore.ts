@@ -34,6 +34,10 @@ const calculateSubtotal = (items: CartItem[]): number => {
   return items.reduce((sum, item) => sum + item.subtotal, 0);
 };
 
+const calculateItemCount = (items: CartItem[]): number => {
+  return items.reduce((sum, item) => sum + item.quantity, 0);
+};
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -51,17 +55,21 @@ export const useCartStore = create<CartState>()(
         if (existingItem) {
           // Update quantity instead
           const newQuantity = existingItem.quantity + 1;
-          const newSubtotal = calculateItemSubtotal(product, variation, gramage, newQuantity);
+          const newSubtotal = calculateItemSubtotal(product, gramage, newQuantity, variation);
           
-          set(state => ({
-            items: state.items.map(item => 
+          set(state => {
+            const newItems = state.items.map(item =>
               item.id === itemId 
                 ? { ...item, quantity: newQuantity, subtotal: newSubtotal }
                 : item
-            ),
-            itemCount: state.itemCount + 1,
-            subtotal: calculateSubtotal(get().items),
-          }));
+            );
+
+            return {
+              items: newItems,
+              itemCount: calculateItemCount(newItems),
+              subtotal: calculateSubtotal(newItems),
+            };
+          });
         } else {
           // Calculate price based on gramage
           const unitPrice = product.discount_price || product.price;
@@ -80,7 +88,7 @@ export const useCartStore = create<CartState>()(
           
           set(state => ({
             items: [...state.items, newItem],
-            itemCount: state.itemCount + 1,
+            itemCount: calculateItemCount([...state.items, newItem]),
             subtotal: calculateSubtotal([...state.items, newItem]),
           }));
         }
@@ -91,7 +99,7 @@ export const useCartStore = create<CartState>()(
           const newItems = state.items.filter(item => item.id !== itemId);
           return {
             items: newItems,
-            itemCount: state.itemCount - (state.items.find(i => i.id === itemId)?.quantity || 0),
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
@@ -108,9 +116,9 @@ export const useCartStore = create<CartState>()(
             if (item.id === itemId) {
               const newSubtotal = calculateItemSubtotal(
                 item.product, 
-                item.variation, 
                 item.gramage, 
-                quantity
+                quantity,
+                item.variation
               );
               return { ...item, quantity, subtotal: newSubtotal };
             }
@@ -119,6 +127,7 @@ export const useCartStore = create<CartState>()(
           
           return {
             items: newItems,
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
@@ -130,9 +139,9 @@ export const useCartStore = create<CartState>()(
             if (item.id === itemId) {
               const newSubtotal = calculateItemSubtotal(
                 item.product, 
-                item.variation, 
                 gramage, 
-                item.quantity
+                item.quantity,
+                item.variation
               );
               return { ...item, gramage, subtotal: newSubtotal };
             }
@@ -141,6 +150,7 @@ export const useCartStore = create<CartState>()(
           
           return {
             items: newItems,
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
@@ -181,9 +191,9 @@ export const useCartStore = create<CartState>()(
 // Helper function
 function calculateItemSubtotal(
   product: Product, 
-  variation?: ProductVariation, 
   gramage: number, 
-  quantity: number
+  quantity: number,
+  variation?: ProductVariation
 ): number {
   const basePrice = product.discount_price || product.price;
   const variationAdjust = variation?.price_adjust || 0;

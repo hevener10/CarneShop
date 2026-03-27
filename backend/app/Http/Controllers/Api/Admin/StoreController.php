@@ -24,7 +24,9 @@ class StoreController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('slug', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhereHas('user', function ($userQuery) use ($search) {
+                      $userQuery->where('email', 'like', "%{$search}%");
+                  });
             });
         }
 
@@ -222,6 +224,13 @@ class StoreController extends Controller
     {
         $store = $request->user()->store;
 
+        if (!$store) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhuma loja encontrada para este usuÃ¡rio.',
+            ], 404);
+        }
+
         return response()->json([
             'success' => true,
             'data' => $store->load(['plan', 'categories', 'neighborhoods']),
@@ -234,6 +243,13 @@ class StoreController extends Controller
     public function updateMe(Request $request): JsonResponse
     {
         $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhuma loja encontrada para este usuÃ¡rio.',
+            ], 404);
+        }
 
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],

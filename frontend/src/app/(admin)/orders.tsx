@@ -231,7 +231,7 @@ export default function OrdersScreen() {
                 <Text>Entrega</Text>
                 <Text>{formatCurrency(selectedOrder?.delivery_fee || 0)}</Text>
               </View>
-              {selectedOrder?.discount > 0 && (
+              {(selectedOrder?.discount || 0) > 0 && (
                 <View style={styles.totalRow}>
                   <Text style={{ color: '#4CAF50' }}>Desconto</Text>
                   <Text style={{ color: '#4CAF50' }}>- {formatCurrency(selectedOrder?.discount || 0)}</Text>
@@ -283,7 +283,7 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               )}
 
-              {selectedOrder?.canBeCanceled() && (
+              {selectedOrder?.can_be_canceled && (
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: '#F44336' }]}
                   onPress={() => updateStatus(selectedOrder, 'canceled')}

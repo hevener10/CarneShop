@@ -2,7 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AuthController;
 use App\Http\Controllers\Api\Admin\PlanController;
-use App\Http\Controllers\Api\Admin\StoreController;
+use App\Http\Controllers\Api\Admin\StoreController as AdminStoreController;
 use App\Http\Controllers\Api\Public\StorefrontController;
 use App\Http\Controllers\Api\Store\CategoryController;
 use App\Http\Controllers\Api\Store\OrderController;
@@ -22,7 +22,7 @@ Route::prefix('v1')->group(function () {
     // ============================================
     Route::prefix('public')->group(function () {
         // Verificar disponibilidade de slug
-        Route::get('/stores/check-slug/{slug}', [StoreController::class, 'checkSlug']);
+        Route::get('/stores/check-slug/{slug}', [StorefrontController::class, 'checkSlug']);
 
         // Loja pública (subdomain)
         Route::prefix('stores/{subdomain}')->group(function () {
@@ -62,9 +62,9 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('admin')->group(function () {
         
         // Gestão de Lojas
-        Route::apiResource('stores', StoreController::class);
-        Route::post('/stores/{id}/pause', [StoreController::class, 'pause']);
-        Route::post('/stores/{id}/resume', [StoreController::class, 'resume']);
+        Route::apiResource('stores', AdminStoreController::class);
+        Route::post('/stores/{id}/pause', [AdminStoreController::class, 'pause']);
+        Route::post('/stores/{id}/resume', [AdminStoreController::class, 'resume']);
         
         // Gestão de Planos
         Route::apiResource('plans', PlanController::class);
@@ -76,8 +76,8 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'role:store_owner', 'store'])->prefix('stores')->group(function () {
         
         // Minha loja
-        Route::get('/me', [StoreController::class, 'me']);
-        Route::put('/me', [StoreController::class, 'updateMe']);
+        Route::get('/me', [AdminStoreController::class, 'me']);
+        Route::put('/me', [AdminStoreController::class, 'updateMe']);
         
         // Categorias
         Route::apiResource('categories', CategoryController::class);

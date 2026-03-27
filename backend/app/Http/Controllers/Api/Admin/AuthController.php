@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -21,14 +22,14 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'role' => ['sometimes', 'in:super_admin,store_owner,customer'],
+            'role' => ['sometimes', Rule::in([User::ROLE_STORE_OWNER, User::ROLE_CUSTOMER])],
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role' => $validated['role'] ?? 'store_owner',
+            'role' => $validated['role'] ?? User::ROLE_STORE_OWNER,
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;

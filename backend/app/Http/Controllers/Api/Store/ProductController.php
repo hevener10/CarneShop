@@ -8,6 +8,7 @@ use App\Models\ProductVariation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -67,7 +68,10 @@ class ProductController extends Controller
         }
 
         $validated = $request->validate([
-            'category_id' => ['nullable', 'exists:categories,id'],
+            'category_id' => [
+                'nullable',
+                Rule::exists('categories', 'id')->where(fn ($query) => $query->where('store_id', $store->id)),
+            ],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
@@ -144,7 +148,10 @@ class ProductController extends Controller
         $product = Product::where('store_id', $store->id)->findOrFail($id);
 
         $validated = $request->validate([
-            'category_id' => ['nullable', 'exists:categories,id'],
+            'category_id' => [
+                'nullable',
+                Rule::exists('categories', 'id')->where(fn ($query) => $query->where('store_id', $store->id)),
+            ],
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'price' => ['sometimes', 'numeric', 'min:0'],

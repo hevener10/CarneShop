@@ -66,7 +66,7 @@ export default function StoreHome() {
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.productCard}
-      onPress={() => router.push({ pathname: '/(store)/product/[slug]', params: { slug: item.slug } })}
+      onPress={() => router.push(`/(store)/product/${item.slug}?store=${slug}` as never)}
     >
       <View style={styles.productImage}>
         {item.image ? (

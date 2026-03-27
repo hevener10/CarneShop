@@ -10,15 +10,30 @@ use App\Models\Neighborhood;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ProductVariation;
 use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
-class StoreController extends Controller
+class StorefrontController extends Controller
 {
+    public function checkSlug(string $slug): JsonResponse
+    {
+        $exists = Store::where('slug', $slug)->exists();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'available' => !$exists,
+                'slug' => $slug,
+            ],
+        ]);
+    }
+
     /**
-     * Ver dados públicos da loja
+     * Ver dados pÃºblicos da loja
      */
     public function show(string $subdomain): JsonResponse
     {
@@ -80,21 +95,18 @@ class StoreController extends Controller
             ->active()
             ->with('category', 'variations');
 
-        // Filtrar por categoria
         if ($request->has('category_id')) {
             $query->where('category_id', $request->category_id);
         }
 
-        // Buscar
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        // Em destaque
         if ($request->has('featured') && $request->featured === 'true') {
             $query->featured();
         }
@@ -109,7 +121,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Ver produto específico
+     * Ver produto especÃ­fico
      */
     public function product(string $subdomain, string $slug): JsonResponse
     {
@@ -123,7 +135,6 @@ class StoreController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
-        // Calcular opções de gramatura
         $gramages = $product->getGramages();
 
         return response()->json([
@@ -211,8 +222,7 @@ class StoreController extends Controller
         $deliveryFee = $store->delivery_fee;
         $minimumOrder = $store->minimum_order;
 
-        // Se tiver bairro específico
-        if ($validated['neighborhood']) {
+        if (!empty($validated['neighborhood'])) {
             $neighborhood = Neighborhood::where('store_id', $store->id)
                 ->active()
                 ->where('name', 'like', '%' . $validated['neighborhood'] . '%')
@@ -244,12 +254,9 @@ class StoreController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            // Cliente
             'customer_name' => ['required', 'string', 'max:255'],
             'customer_phone' => ['required', 'string', 'max:20'],
             'customer_email' => ['nullable', 'email'],
-
-            // Entrega
             'delivery_address' => ['nullable', 'string', 'max:255'],
             'delivery_number' => ['nullable', 'string', 'max:20'],
             'delivery_complement' => ['nullable', 'string', 'max:100'],
@@ -257,32 +264,24 @@ class StoreController extends Controller
             'delivery_city' => ['nullable', 'string', 'max:100'],
             'delivery_state' => ['nullable', 'string', 'size:2'],
             'delivery_reference' => ['nullable', 'string', 'max:255'],
-
-            // Itens
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
-            'items.*.product_name' => ['required', 'string'],
-            'items.*.variation_name' => ['nullable', 'string'],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
+            'items.*.variation_id' => ['nullable', 'integer'],
+            'items.*.quantity' => ['required', 'numeric', 'min:1'],
             'items.*.gramage' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
-            'items.*.subtotal' => ['required', 'numeric', 'min:0'],
             'items.*.observations' => ['nullable', 'string'],
-
-            // Pagamento
             'payment_method' => ['required', 'in:money,pix,card,transfer'],
             'change_for' => ['nullable', 'numeric', 'min:0'],
-
-            // Entrega
-            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
-            'neighborhood' => ['nullable', 'string'],
+            // Compatibilidade com payloads antigos. O backend ignora esses valores.
+            'items.*.product_name' => ['nullable', 'string'],
+            'items.*.variation_name' => ['nullable', 'string'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.subtotal' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        // Calcular entrega
-        $deliveryFee = $validated['delivery_fee'] ?? $store->delivery_fee;
+        $deliveryFee = $store->delivery_fee;
         $minimumOrder = $store->minimum_order;
 
-        // Verificar bairro
         if (!empty($validated['delivery_neighborhood'])) {
             $neighborhood = Neighborhood::where('store_id', $store->id)
                 ->active()
@@ -295,18 +294,16 @@ class StoreController extends Controller
             }
         }
 
-        // Calcular subtotal
-        $subtotal = collect($validated['items'])->sum('subtotal');
+        $resolvedItems = $this->resolveCheckoutItems($store, $validated['items']);
+        $subtotal = round($resolvedItems->sum('subtotal'), 2);
 
-        // Verificar pedido mínimo
         if ($subtotal < $minimumOrder) {
             return response()->json([
                 'success' => false,
-                'message' => "Pedido mínimo: R\$ " . number_format($minimumOrder, 2, ',', '.'),
+                'message' => 'Pedido mÃ­nimo: R$ ' . number_format((float) $minimumOrder, 2, ',', '.'),
             ], 422);
         }
 
-        // Criar pedido
         $order = Order::create([
             'store_id' => $store->id,
             'customer_name' => $validated['customer_name'],
@@ -322,33 +319,29 @@ class StoreController extends Controller
             'subtotal' => $subtotal,
             'delivery_fee' => $deliveryFee,
             'discount' => 0,
-            'total' => $subtotal + $deliveryFee,
+            'total' => round($subtotal + (float) $deliveryFee, 2),
             'payment_method' => $validated['payment_method'],
             'change_for' => $validated['change_for'] ?? null,
             'payment_status' => 'pending',
             'status' => 'pending',
         ]);
 
-        // Criar itens
-        foreach ($validated['items'] as $item) {
+        foreach ($resolvedItems as $item) {
             OrderItem::create([
                 'order_id' => $order->id,
                 'product_id' => $item['product_id'],
                 'product_name' => $item['product_name'],
-                'variation_name' => $item['variation_name'] ?? null,
+                'variation_name' => $item['variation_name'],
                 'quantity' => $item['quantity'],
-                'gramage' => $item['gramage'] ?? null,
+                'gramage' => $item['gramage'],
                 'unit_price' => $item['unit_price'],
                 'subtotal' => $item['subtotal'],
-                'observations' => $item['observations'] ?? null,
+                'observations' => $item['observations'],
             ]);
         }
 
-        // Gerar mensagem WhatsApp
         $order->load('items');
         $whatsappMessage = $order->generateWhatsappMessage();
-        
-        // Salvar mensagem
         $order->update(['whatsapp_message' => $whatsappMessage]);
 
         return response()->json([
@@ -356,11 +349,98 @@ class StoreController extends Controller
             'data' => [
                 'order' => $order,
                 'whatsapp_message' => $whatsappMessage,
-                'whatsapp_link' => $store->getWhatsappLink() 
+                'whatsapp_link' => $store->getWhatsappLink()
                     ? $store->getWhatsappLink() . '?text=' . rawurlencode($whatsappMessage)
                     : null,
             ],
             'message' => 'Pedido realizado com sucesso!',
         ], 201);
+    }
+
+    private function resolveCheckoutItems(Store $store, array $rawItems): Collection
+    {
+        $productIds = collect($rawItems)
+            ->pluck('product_id')
+            ->map(static fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $products = Product::where('store_id', $store->id)
+            ->active()
+            ->with(['allVariations' => fn ($query) => $query->active()])
+            ->whereIn('id', $productIds)
+            ->get()
+            ->keyBy('id');
+
+        return collect($rawItems)->map(function (array $item, int $index) use ($products) {
+            $product = $products->get((int) $item['product_id']);
+
+            if (!$product) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_id" => ['Produto invÃ¡lido para esta loja.'],
+                ]);
+            }
+
+            $variation = $this->resolveVariation($product, $item, $index);
+            $gramage = $this->resolveGramage($product, $item, $index);
+            $quantity = (float) $item['quantity'];
+            $unitPrice = $this->calculateUnitPrice($product, $variation, $gramage);
+
+            return [
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'variation_name' => $variation?->name,
+                'quantity' => $quantity,
+                'gramage' => $gramage,
+                'unit_price' => round($unitPrice, 2),
+                'subtotal' => round($unitPrice * $quantity, 2),
+                'observations' => $item['observations'] ?? null,
+            ];
+        });
+    }
+
+    private function resolveVariation(Product $product, array $item, int $index): ?ProductVariation
+    {
+        if (empty($item['variation_id'])) {
+            return null;
+        }
+
+        $variation = $product->allVariations->firstWhere('id', (int) $item['variation_id']);
+
+        if (!$variation) {
+            throw ValidationException::withMessages([
+                "items.{$index}.variation_id" => ['VariaÃ§Ã£o invÃ¡lida para este produto.'],
+            ]);
+        }
+
+        return $variation;
+    }
+
+    private function resolveGramage(Product $product, array $item, int $index): int
+    {
+        $gramage = (int) ($item['gramage'] ?? $product->min_gramage);
+
+        if ($gramage < $product->min_gramage || $gramage > $product->max_gramage) {
+            throw ValidationException::withMessages([
+                "items.{$index}.gramage" => ['Gramatura fora do intervalo permitido para este produto.'],
+            ]);
+        }
+
+        if ((($gramage - $product->min_gramage) % $product->gramage_step) !== 0) {
+            throw ValidationException::withMessages([
+                "items.{$index}.gramage" => ['Gramatura invÃ¡lida para o step configurado deste produto.'],
+            ]);
+        }
+
+        return $gramage;
+    }
+
+    private function calculateUnitPrice(Product $product, ?ProductVariation $variation, int $gramage): float
+    {
+        $basePrice = (float) ($product->discount_price ?? $product->price);
+        $variationAdjust = (float) ($variation?->price_adjust ?? 0);
+        $pricePerGram = ($basePrice + $variationAdjust) / 1000;
+
+        return $pricePerGram * $gramage;
     }
 }

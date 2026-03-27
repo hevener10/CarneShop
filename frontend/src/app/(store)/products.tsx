@@ -9,7 +9,7 @@ export default function ProductsList() {
   const params = useLocalSearchParams();
   const categoryId = params.categoryId as string;
   const categoryName = params.categoryName as string;
-  const storeSlug = params.store || 'demo';
+  const storeSlug = (params.store as string) || 'demo';
   
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -69,7 +69,7 @@ export default function ProductsList() {
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.productCard}
-      onPress={() => router.push({ pathname: '/(store)/product/[slug]', params: { slug: item.slug, store: storeSlug } })}
+      onPress={() => router.push(`/(store)/product/${item.slug}?store=${storeSlug}` as never)}
     >
       <View style={styles.productImage}>
         {item.image ? (

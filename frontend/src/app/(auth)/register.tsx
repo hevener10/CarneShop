@@ -29,7 +29,7 @@ export default function RegisterScreen() {
     }
 
     try {
-      await register({ name, email, password });
+      await register({ name, email, password, password_confirmation: passwordConfirm });
       Alert.alert('Sucesso', 'Conta criada com sucesso!');
       router.replace('/(admin)');
     } catch (error: any) {

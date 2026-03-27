@@ -10,6 +10,11 @@ class Order extends Model
 {
     use HasFactory;
 
+    protected $appends = [
+        'can_be_canceled',
+        'can_change_status',
+    ];
+
     protected $fillable = [
         'store_id',
         'order_number',
@@ -118,6 +123,16 @@ class Order extends Model
         ]);
 
         return implode(', ', $parts);
+    }
+
+    public function getCanBeCanceledAttribute(): bool
+    {
+        return $this->canBeCanceled();
+    }
+
+    public function getCanChangeStatusAttribute(): bool
+    {
+        return $this->canChangeStatus();
     }
 
     // Relações

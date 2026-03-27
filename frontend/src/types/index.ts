@@ -17,6 +17,7 @@ export interface Store {
   logo?: string;
   primary_color: string;
   whatsapp?: string;
+  whatsapp_link?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -136,6 +137,8 @@ export interface Order {
   admin_notes?: string;
   cancellation_reason?: string;
   whatsapp_message?: string;
+  can_be_canceled?: boolean;
+  can_change_status?: boolean;
   created_at: string;
   items?: OrderItem[];
 }

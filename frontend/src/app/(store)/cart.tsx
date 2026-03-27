@@ -31,12 +31,9 @@ export default function CartScreen() {
         customer_phone: '11999999999',
         items: items.map(item => ({
           product_id: item.product.id,
-          product_name: item.product.name,
-          variation_name: item.variation?.name,
+          variation_id: item.variation?.id,
           quantity: item.quantity,
           gramage: item.gramage,
-          unit_price: (item.product.discount_price || item.product.price) / 1000 * item.gramage,
-          subtotal: item.subtotal,
           observations: item.observations,
         })),
         payment_method: 'money',

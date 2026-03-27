@@ -74,7 +74,7 @@ export default function ProductsScreen() {
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={[styles.productCard, !item.is_active && styles.productCardInactive]}
-      onPress={() => router.push({ pathname: '/(admin)/products/[id]', params: { id: item.id } })}
+      onPress={() => router.push(`/(admin)/products/${item.id}` as never)}
     >
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
@@ -103,7 +103,7 @@ export default function ProductsScreen() {
           <Text style={styles.backButton}>← Voltar</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Produtos</Text>
-        <TouchableOpacity onPress={() => router.push('/(admin)/products/new')}>
+        <TouchableOpacity onPress={() => router.push('/(admin)/products/new' as never)}>
           <Text style={styles.addButton}>➕</Text>
         </TouchableOpacity>
       </View>

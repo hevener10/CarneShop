@@ -148,7 +148,11 @@ class Store extends Model
         $phone = preg_replace('/[^0-9]/', '', $this->whatsapp);
         
         // Adiciona país se não tiver
-        if (strlen($phone) === 10) {
+        if ($phone === '') {
+            return '';
+        }
+
+        if (!str_starts_with($phone, '55') && in_array(strlen($phone), [10, 11], true)) {
             $phone = '55' . $phone;
         }
         
@@ -157,7 +161,7 @@ class Store extends Model
 
     public function canAddProduct(): bool
     {
-        $limit = $this->plan->limit_products;
+        $limit = $this->plan?->limit_products;
         
         // Limite ilimitado
         if ($limit === 0 || $limit === null) {
@@ -169,7 +173,7 @@ class Store extends Model
 
     public function canAddCategory(): bool
     {
-        $limit = $this->plan->limit_categories;
+        $limit = $this->plan?->limit_categories;
         
         // Limite ilimitado
         if ($limit === 0 || $limit === null) {
