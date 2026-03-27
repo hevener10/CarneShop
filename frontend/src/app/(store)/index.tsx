@@ -76,8 +76,8 @@ export default function StoreHome() {
    * Abre o canal de WhatsApp configurado para a loja.
    */
   const handleWhatsApp = () => {
-    if (store?.whatsapp_link) {
-      Linking.openURL(store.whatsapp_link);
+    if (store?.whatsapp) {
+      Linking.openURL(store.whatsapp);
     }
   };
 
