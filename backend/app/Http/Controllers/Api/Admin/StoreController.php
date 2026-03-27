@@ -12,19 +12,21 @@ use Illuminate\Support\Str;
 class StoreController extends Controller
 {
     /**
-     * Listar todas as lojas (Super Admin)
+     * Listar todas as lojas (Super Admin).
      */
     public function index(Request $request): JsonResponse
     {
         $query = Store::with(['user', 'plan', 'currentSubscription']);
 
-        // Filtros
+        // Filtros.
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('slug', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('email', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -46,7 +48,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Criar nova loja (Super Admin)
+     * Criar nova loja (Super Admin).
      */
     public function store(Request $request): JsonResponse
     {
@@ -63,11 +65,11 @@ class StoreController extends Controller
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        // Gerar slug automático
+        // Gerar slug automático.
         if (empty($validated['slug'])) {
             $validated['slug'] = Str::slug($validated['name']);
-            
-            // Garantir slug único
+
+            // Garantir slug único.
             $count = Store::where('slug', 'like', $validated['slug'] . '%')->count();
             if ($count > 0) {
                 $validated['slug'] .= '-' . ($count + 1);
@@ -84,7 +86,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Ver detalhes de uma loja
+     * Ver detalhes de uma loja.
      */
     public function show(int $id): JsonResponse
     {
@@ -98,7 +100,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Atualizar loja
+     * Atualizar loja.
      */
     public function update(Request $request, int $id): JsonResponse
     {
@@ -133,15 +135,15 @@ class StoreController extends Controller
     }
 
     /**
-     * Deletar loja
+     * Deletar loja.
      */
     public function destroy(int $id): JsonResponse
     {
         $store = Store::findOrFail($id);
-        
-        // Verificar se tem pedidos recentes
+
+        // Verificar se tem pedidos recentes.
         $recentOrders = $store->orders()->where('created_at', '>=', now()->subDays(30))->count();
-        
+
         if ($recentOrders > 0) {
             return response()->json([
                 'success' => false,
@@ -158,7 +160,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Pausar loja
+     * Pausar loja.
      */
     public function pause(int $id): JsonResponse
     {
@@ -177,7 +179,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Ativar loja
+     * Ativar loja.
      */
     public function resume(int $id): JsonResponse
     {
@@ -196,7 +198,7 @@ class StoreController extends Controller
     }
 
     /**
-     * Verificar disponibilidade de slug
+     * Verificar disponibilidade de slug.
      */
     public function checkSlug(string $slug): JsonResponse
     {
@@ -216,11 +218,18 @@ class StoreController extends Controller
     // ============================================
 
     /**
-     * Minha loja (Store Owner)
+     * Minha loja (Store Owner).
      */
     public function me(Request $request): JsonResponse
     {
         $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhuma loja encontrada para este usuário.',
+            ], 404);
+        }
 
         return response()->json([
             'success' => true,
@@ -229,11 +238,18 @@ class StoreController extends Controller
     }
 
     /**
-     * Atualizar minha loja (Store Owner)
+     * Atualizar minha loja (Store Owner).
      */
     public function updateMe(Request $request): JsonResponse
     {
         $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhuma loja encontrada para este usuário.',
+            ], 404);
+        }
 
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],

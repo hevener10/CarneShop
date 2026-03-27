@@ -7,11 +7,11 @@ interface CartState {
   items: CartItem[];
   storeId: number | null;
   storeSlug: string | null;
-  
+
   // Computed
   itemCount: number;
   subtotal: number;
-  
+
   // Actions
   addItem: (product: Product, variation?: ProductVariation, gramage?: number, observations?: string) => void;
   removeItem: (itemId: string) => void;
@@ -23,8 +23,8 @@ interface CartState {
 }
 
 const generateItemId = (
-  productId: number, 
-  variationId?: number, 
+  productId: number,
+  variationId?: number,
   gramage?: number
 ): string => {
   return `${productId}-${variationId || 'none'}-${gramage || 'none'}`;
@@ -32,6 +32,13 @@ const generateItemId = (
 
 const calculateSubtotal = (items: CartItem[]): number => {
   return items.reduce((sum, item) => sum + item.subtotal, 0);
+};
+
+/**
+ * Recalcula a contagem agregada de itens considerando a quantidade de cada linha do carrinho.
+ */
+const calculateItemCount = (items: CartItem[]): number => {
+  return items.reduce((sum, item) => sum + item.quantity, 0);
 };
 
 export const useCartStore = create<CartState>()(
@@ -43,31 +50,35 @@ export const useCartStore = create<CartState>()(
       itemCount: 0,
       subtotal: 0,
 
-      addItem: (product, variation, gramage = product.min_gramage || 500, observations = '') => {
+      addItem: (product, variation, gramage = product.min_gramage ?? 500, observations = '') => {
         const itemId = generateItemId(product.id, variation?.id, gramage);
-        
-        const existingItem = get().items.find(item => item.id === itemId);
-        
+
+        const existingItem = get().items.find((item) => item.id === itemId);
+
         if (existingItem) {
-          // Update quantity instead
+          // Update quantity instead.
           const newQuantity = existingItem.quantity + 1;
-          const newSubtotal = calculateItemSubtotal(product, variation, gramage, newQuantity);
-          
-          set(state => ({
-            items: state.items.map(item => 
-              item.id === itemId 
+          const newSubtotal = calculateItemSubtotal(product, gramage, newQuantity, variation);
+
+          set((state) => {
+            const newItems = state.items.map((item) =>
+              item.id === itemId
                 ? { ...item, quantity: newQuantity, subtotal: newSubtotal }
                 : item
-            ),
-            itemCount: state.itemCount + 1,
-            subtotal: calculateSubtotal(get().items),
-          }));
+            );
+
+            return {
+              items: newItems,
+              itemCount: calculateItemCount(newItems),
+              subtotal: calculateSubtotal(newItems),
+            };
+          });
         } else {
-          // Calculate price based on gramage
+          // Calculate price based on gramage.
           const unitPrice = product.discount_price || product.price;
           const pricePerGram = unitPrice / 1000;
           const subtotal = pricePerGram * gramage;
-          
+
           const newItem: CartItem = {
             id: itemId,
             product,
@@ -77,21 +88,21 @@ export const useCartStore = create<CartState>()(
             observations,
             subtotal,
           };
-          
-          set(state => ({
+
+          set((state) => ({
             items: [...state.items, newItem],
-            itemCount: state.itemCount + 1,
+            itemCount: calculateItemCount([...state.items, newItem]),
             subtotal: calculateSubtotal([...state.items, newItem]),
           }));
         }
       },
 
       removeItem: (itemId: string) => {
-        set(state => {
-          const newItems = state.items.filter(item => item.id !== itemId);
+        set((state) => {
+          const newItems = state.items.filter((item) => item.id !== itemId);
           return {
             items: newItems,
-            itemCount: state.itemCount - (state.items.find(i => i.id === itemId)?.quantity || 0),
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
@@ -102,53 +113,55 @@ export const useCartStore = create<CartState>()(
           get().removeItem(itemId);
           return;
         }
-        
-        set(state => {
-          const newItems = state.items.map(item => {
+
+        set((state) => {
+          const newItems = state.items.map((item) => {
             if (item.id === itemId) {
               const newSubtotal = calculateItemSubtotal(
-                item.product, 
-                item.variation, 
-                item.gramage, 
-                quantity
+                item.product,
+                item.gramage,
+                quantity,
+                item.variation
               );
               return { ...item, quantity, subtotal: newSubtotal };
             }
             return item;
           });
-          
+
           return {
             items: newItems,
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
       },
 
       updateGramage: (itemId: string, gramage: number) => {
-        set(state => {
-          const newItems = state.items.map(item => {
+        set((state) => {
+          const newItems = state.items.map((item) => {
             if (item.id === itemId) {
               const newSubtotal = calculateItemSubtotal(
-                item.product, 
-                item.variation, 
-                gramage, 
-                item.quantity
+                item.product,
+                gramage,
+                item.quantity,
+                item.variation
               );
               return { ...item, gramage, subtotal: newSubtotal };
             }
             return item;
           });
-          
+
           return {
             items: newItems,
+            itemCount: calculateItemCount(newItems),
             subtotal: calculateSubtotal(newItems),
           };
         });
       },
 
       updateObservations: (itemId: string, observations: string) => {
-        set(state => ({
-          items: state.items.map(item => 
+        set((state) => ({
+          items: state.items.map((item) =>
             item.id === itemId ? { ...item, observations } : item
           ),
         }));
@@ -163,7 +176,7 @@ export const useCartStore = create<CartState>()(
       },
 
       setStore: (storeId: number, storeSlug: string) => {
-        // Clear cart if changing stores
+        // Clear cart if changing stores.
         const currentStoreId = get().storeId;
         if (currentStoreId && currentStoreId !== storeId) {
           get().clearCart();
@@ -178,12 +191,14 @@ export const useCartStore = create<CartState>()(
   )
 );
 
-// Helper function
+/**
+ * Recalcula o subtotal de uma linha do carrinho combinando peso, quantidade e variacao.
+ */
 function calculateItemSubtotal(
-  product: Product, 
-  variation?: ProductVariation, 
-  gramage: number, 
-  quantity: number
+  product: Product,
+  gramage: number,
+  quantity: number,
+  variation?: ProductVariation
 ): number {
   const basePrice = product.discount_price || product.price;
   const variationAdjust = variation?.price_adjust || 0;

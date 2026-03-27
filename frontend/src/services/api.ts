@@ -59,18 +59,20 @@ class ApiService {
   // Auth methods
   public async login(email: string, password: string) {
     const response = await this.client.post(ENDPOINTS.login, { email, password });
-    if (response.data.token) {
-      await SecureStore.setItemAsync('auth_token', response.data.token);
+    const payload = response.data.data;
+    if (payload?.token) {
+      await SecureStore.setItemAsync('auth_token', payload.token);
     }
-    return response.data;
+    return payload;
   }
 
-  public async register(data: { name: string; email: string; password: string }) {
+  public async register(data: { name: string; email: string; password: string; password_confirmation: string }) {
     const response = await this.client.post(ENDPOINTS.register, data);
-    if (response.data.token) {
-      await SecureStore.setItemAsync('auth_token', response.data.token);
+    const payload = response.data.data;
+    if (payload?.token) {
+      await SecureStore.setItemAsync('auth_token', payload.token);
     }
-    return response.data;
+    return payload;
   }
 
   public async logout() {

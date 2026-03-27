@@ -1,17 +1,33 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 
+/**
+ * Exibe o formulario de cadastro e cria uma nova conta de acesso ao painel.
+ */
 export default function RegisterScreen() {
   const router = useRouter();
   const { register, isLoading } = useAuthStore();
-  
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
 
+  /**
+   * Valida os campos do formulario e envia o cadastro ao backend.
+   */
   const handleRegister = async () => {
     if (!name || !email || !password || !passwordConfirm) {
       Alert.alert('Erro', 'Preencha todos os campos');
@@ -19,7 +35,7 @@ export default function RegisterScreen() {
     }
 
     if (password !== passwordConfirm) {
-      Alert.alert('Erro', 'As senhas não conferem');
+      Alert.alert('Erro', 'As senhas nao conferem');
       return;
     }
 
@@ -29,7 +45,7 @@ export default function RegisterScreen() {
     }
 
     try {
-      await register({ name, email, password });
+      await register({ name, email, password, password_confirmation: passwordConfirm });
       Alert.alert('Sucesso', 'Conta criada com sucesso!');
       router.replace('/(admin)');
     } catch (error: any) {
@@ -39,13 +55,13 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.logo}>🦔</Text>
+          <Text style={styles.logo}>CS</Text>
           <Text style={styles.title}>Criar Conta</Text>
           <Text style={styles.subtitle}>Junte-se ao CarneShop</Text>
         </View>
@@ -76,7 +92,7 @@ export default function RegisterScreen() {
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="••••••••"
+            placeholder="********"
             secureTextEntry
           />
 
@@ -85,11 +101,11 @@ export default function RegisterScreen() {
             style={styles.input}
             value={passwordConfirm}
             onChangeText={setPasswordConfirm}
-            placeholder="••••••••"
+            placeholder="********"
             secureTextEntry
           />
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleRegister}
             disabled={isLoading}
@@ -99,12 +115,9 @@ export default function RegisterScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.linkButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.linkButton} onPress={() => router.back()}>
             <Text style={styles.linkText}>
-              Já tem conta? <Text style={styles.linkBold}>Entrar</Text>
+              Ja tem conta? <Text style={styles.linkBold}>Entrar</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -128,8 +141,10 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logo: {
-    fontSize: 64,
+    fontSize: 32,
+    fontWeight: '700',
     marginBottom: 16,
+    color: '#FF4500',
   },
   title: {
     fontSize: 32,

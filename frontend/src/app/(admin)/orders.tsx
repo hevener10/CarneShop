@@ -22,6 +22,9 @@ const STATUS_LABELS: Record<string, string> = {
   canceled: 'Cancelado',
 };
 
+/**
+ * Lista os pedidos da loja e permite alterar seu status no painel administrativo.
+ */
 export default function OrdersScreen() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -31,6 +34,9 @@ export default function OrdersScreen() {
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
 
+  /**
+   * Busca os pedidos da loja aplicando o filtro selecionado.
+   */
   const fetchOrders = async () => {
     try {
       const params: any = {};
@@ -44,6 +50,9 @@ export default function OrdersScreen() {
   };
 
   useEffect(() => {
+    /**
+     * Carrega a listagem inicial sempre que o filtro muda.
+     */
     const load = async () => {
       setLoading(true);
       await fetchOrders();
@@ -52,12 +61,18 @@ export default function OrdersScreen() {
     load();
   }, [filter]);
 
+  /**
+   * Atualiza manualmente a listagem de pedidos.
+   */
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchOrders();
     setRefreshing(false);
   };
 
+  /**
+   * Envia a troca de status do pedido selecionado.
+   */
   const updateStatus = async (order: Order, newStatus: string) => {
     try {
       await api.getClient().put(`/stores/me/orders/${order.id}/status`, {
@@ -70,10 +85,16 @@ export default function OrdersScreen() {
     }
   };
 
+  /**
+   * Formata valores monetarios para exibicao no painel.
+   */
   const formatCurrency = (value: number) => {
     return 'R$ ' + value.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Formata a data do pedido para o padrao local.
+   */
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -83,6 +104,9 @@ export default function OrdersScreen() {
     });
   };
 
+  /**
+   * Renderiza um card resumido de pedido na listagem.
+   */
   const renderOrder = ({ item }: { item: Order }) => (
     <TouchableOpacity 
       style={styles.orderCard}
@@ -231,7 +255,7 @@ export default function OrdersScreen() {
                 <Text>Entrega</Text>
                 <Text>{formatCurrency(selectedOrder?.delivery_fee || 0)}</Text>
               </View>
-              {selectedOrder?.discount > 0 && (
+              {(selectedOrder?.discount || 0) > 0 && (
                 <View style={styles.totalRow}>
                   <Text style={{ color: '#4CAF50' }}>Desconto</Text>
                   <Text style={{ color: '#4CAF50' }}>- {formatCurrency(selectedOrder?.discount || 0)}</Text>
@@ -283,7 +307,7 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               )}
 
-              {selectedOrder?.canBeCanceled() && (
+              {selectedOrder?.can_be_canceled && (
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: '#F44336' }]}
                   onPress={() => updateStatus(selectedOrder, 'canceled')}

@@ -7,13 +7,14 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     /**
-     * Registrar novo usuário (Super Admin ou Dono de Loja)
+     * Registrar novo usuário (Super Admin ou Dono de Loja).
      */
     public function register(Request $request): JsonResponse
     {
@@ -21,14 +22,14 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'role' => ['sometimes', 'in:super_admin,store_owner,customer'],
+            'role' => ['sometimes', Rule::in([User::ROLE_STORE_OWNER, User::ROLE_CUSTOMER])],
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role' => $validated['role'] ?? 'store_owner',
+            'role' => $validated['role'] ?? User::ROLE_STORE_OWNER,
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;
@@ -44,7 +45,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Login de usuário
+     * Login de usuário.
      */
     public function login(Request $request): JsonResponse
     {
@@ -80,7 +81,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout
+     * Logout.
      */
     public function logout(Request $request): JsonResponse
     {
@@ -93,7 +94,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Dados do usuário logado
+     * Dados do usuário logado.
      */
     public function me(Request $request): JsonResponse
     {
@@ -106,7 +107,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Atualizar perfil
+     * Atualizar perfil.
      */
     public function updateProfile(Request $request): JsonResponse
     {
@@ -127,7 +128,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Alterar senha
+     * Alterar senha.
      */
     public function changePassword(Request $request): JsonResponse
     {
@@ -148,7 +149,7 @@ class AuthController extends Controller
             'password' => $request->password,
         ]);
 
-        // Invalidar outros tokens (opcional)
+        // Invalidar outros tokens (opcional).
         // $user->tokens()->where('id', '!=', $user->currentAccessTokenId())->delete();
 
         return response()->json([
@@ -158,15 +159,14 @@ class AuthController extends Controller
     }
 
     /**
-     * Esqueci a senha - enviar email de reset
+     * Esqueci a senha e enviar email de reset.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
         $request->validate(['email' => ['required', 'email']]);
 
-        // Aqui você enviaria o email com o link de reset
-        // Por agora, retornamos sucesso simulado
-
+        // Aqui você enviaria o email com o link de reset.
+        // Por agora, retornamos sucesso simulado.
         return response()->json([
             'success' => true,
             'message' => 'Se o email existir, você receberá um link de recuperação.',
@@ -174,7 +174,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Reset de senha
+     * Reset de senha.
      */
     public function resetPassword(Request $request): JsonResponse
     {
@@ -184,9 +184,8 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        // Aqui você validaria o token e resetaria a senha
-        // Por agora, retornamos sucesso simulado
-
+        // Aqui você validaria o token e resetaria a senha.
+        // Por agora, retornamos sucesso simulado.
         return response()->json([
             'success' => true,
             'message' => 'Senha resetada com sucesso',

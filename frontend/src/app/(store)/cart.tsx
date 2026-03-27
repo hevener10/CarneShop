@@ -5,6 +5,9 @@ import * as Linking from 'expo-linking';
 import api from '@/services/api';
 import { useCartStore } from '@/stores/cartStore';
 
+/**
+ * Exibe o carrinho atual e dispara o checkout publico da loja.
+ */
 export default function CartScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -13,10 +16,16 @@ export default function CartScreen() {
   const { items, subtotal, removeItem, updateQuantity, updateGramage, clearCart } = useCartStore();
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Formata valores monetarios exibidos no resumo do carrinho.
+   */
   const formatPrice = (value: number) => {
     return 'R$ ' + value.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Envia o pedido ao backend e abre o link de WhatsApp retornado no checkout.
+   */
   const handleCheckout = async () => {
     if (items.length === 0) {
       Alert.alert('Erro', 'Seu carrinho está vazio');
@@ -31,12 +40,9 @@ export default function CartScreen() {
         customer_phone: '11999999999',
         items: items.map(item => ({
           product_id: item.product.id,
-          product_name: item.product.name,
-          variation_name: item.variation?.name,
+          variation_id: item.variation?.id,
           quantity: item.quantity,
           gramage: item.gramage,
-          unit_price: (item.product.discount_price || item.product.price) / 1000 * item.gramage,
-          subtotal: item.subtotal,
           observations: item.observations,
         })),
         payment_method: 'money',
@@ -69,6 +75,9 @@ export default function CartScreen() {
     }
   };
 
+  /**
+   * Renderiza uma linha do carrinho com controles de quantidade.
+   */
   const renderItem = ({ item }: any) => (
     <View style={styles.cartItem}>
       <View style={styles.itemImage}>
