@@ -19,6 +19,9 @@ class ApiRegressionTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Garante que o cadastro público não aceite escalonamento para super admin.
+     */
     public function test_public_registration_rejects_super_admin_role(): void
     {
         $response = $this->postJson('/api/v1/auth/register', [
@@ -37,6 +40,9 @@ class ApiRegressionTest extends TestCase
         ]);
     }
 
+    /**
+     * Garante que o cadastro público crie dono de loja por padrão e retorne token.
+     */
     public function test_public_registration_defaults_to_store_owner(): void
     {
         $response = $this->postJson('/api/v1/auth/register', [
@@ -56,19 +62,36 @@ class ApiRegressionTest extends TestCase
         ]);
     }
 
+    /**
+     * Garante que as rotas públicas usem o controller correto e normalizem o slug.
+     */
     public function test_public_storefront_routes_resolve_correctly(): void
     {
-        $store = $this->createStore();
+        $store = $this->createStore(['slug' => 'minha-loja']);
 
-        $this->getJson('/api/v1/public/stores/check-slug/' . $store->slug)
+        $this->getJson('/api/v1/public/stores/check-slug/Minha Loja')
             ->assertOk()
-            ->assertJsonPath('data.available', false);
+            ->assertJsonPath('data.available', false)
+            ->assertJsonPath('data.slug', $store->slug);
 
         $this->getJson('/api/v1/public/stores/' . $store->slug)
             ->assertOk()
             ->assertJsonPath('data.slug', $store->slug);
     }
 
+    /**
+     * Garante que slugs inválidos sejam rejeitados após a normalização.
+     */
+    public function test_public_check_slug_rejects_empty_normalized_slug(): void
+    {
+        $this->getJson('/api/v1/public/stores/check-slug/!!!')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('slug');
+    }
+
+    /**
+     * Garante que o checkout refaça o cálculo server-side e ignore preços do cliente.
+     */
     public function test_checkout_recomputes_prices_server_side(): void
     {
         $store = $this->createStore([
@@ -135,6 +158,40 @@ class ApiRegressionTest extends TestCase
         $this->assertSame(100.0, (float) $order->items[0]->subtotal);
     }
 
+    /**
+     * Garante que produtos sem configuração de gramatura válida sejam rejeitados no checkout.
+     */
+    public function test_checkout_rejects_product_without_gramage_configuration(): void
+    {
+        $store = $this->createStore([
+            'delivery_fee' => 0,
+            'minimum_order' => 0,
+        ]);
+
+        $product = Product::create([
+            'store_id' => $store->id,
+            'name' => 'Cupim',
+            'slug' => 'cupim',
+            'price' => 45,
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/v1/public/stores/' . $store->slug . '/checkout', [
+            'customer_name' => 'Cliente',
+            'customer_phone' => '11999999999',
+            'items' => [[
+                'product_id' => $product->id,
+                'quantity' => 1,
+            ]],
+            'payment_method' => 'money',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('items.0.gramage');
+    }
+
+    /**
+     * Garante que uma categoria de outra loja seja rejeitada ao criar produto.
+     */
     public function test_product_creation_rejects_category_from_another_store(): void
     {
         $owner = User::create([
@@ -168,12 +225,18 @@ class ApiRegressionTest extends TestCase
             'category_id' => $foreignCategory->id,
             'name' => 'Produto',
             'price' => 50,
+            'min_gramage' => 500,
+            'max_gramage' => 1500,
+            'gramage_step' => 500,
         ]);
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors('category_id');
     }
 
+    /**
+     * Garante que o dono da loja receba 404 claro quando a relação da loja estiver ausente.
+     */
     public function test_store_owner_me_returns_404_when_store_relation_is_missing(): void
     {
         $owner = User::create([
@@ -188,9 +251,12 @@ class ApiRegressionTest extends TestCase
         $this->withoutMiddleware(StoreMiddleware::class)
             ->getJson('/api/v1/stores/me')
             ->assertNotFound()
-            ->assertJsonPath('message', 'Nenhuma loja encontrada para este usuÃ¡rio.');
+            ->assertJsonPath('message', 'Nenhuma loja encontrada para este usuário.');
     }
 
+    /**
+     * Cria uma loja funcional para os testes de regressão.
+     */
     private function createStore(array $overrides = []): Store
     {
         $plan = Plan::create([

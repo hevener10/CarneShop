@@ -1,10 +1,25 @@
+import { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
+/**
+ * Renderiza a tela placeholder de detalhes do produto e protege a rota contra ids invalidos.
+ */
 export default function ProductDetailsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const id = params.id as string;
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const normalizedId = Array.isArray(id) ? id[0] : id;
+  const productId = normalizedId?.trim();
+
+  useEffect(() => {
+    if (!productId) {
+      router.replace('/(admin)/products' as never);
+    }
+  }, [productId, router]);
+
+  if (!productId) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -12,7 +27,7 @@ export default function ProductDetailsScreen() {
         <Text style={styles.backButton}>Voltar</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>Produto #{id}</Text>
+      <Text style={styles.title}>Produto #{productId}</Text>
       <Text style={styles.description}>
         Tela inicial de detalhes criada para estabilizar a navegacao do painel.
       </Text>

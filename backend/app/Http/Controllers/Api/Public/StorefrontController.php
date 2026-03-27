@@ -15,25 +15,37 @@ use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StorefrontController extends Controller
 {
+    /**
+     * Verifica se um slug público está disponível após a normalização.
+     */
     public function checkSlug(string $slug): JsonResponse
     {
-        $exists = Store::where('slug', $slug)->exists();
+        $normalizedSlug = Str::slug($slug);
+
+        if ($normalizedSlug === '') {
+            throw ValidationException::withMessages([
+                'slug' => ['Slug inválido.'],
+            ]);
+        }
+
+        $exists = Store::where('slug', $normalizedSlug)->exists();
 
         return response()->json([
             'success' => true,
             'data' => [
                 'available' => !$exists,
-                'slug' => $slug,
+                'slug' => $normalizedSlug,
             ],
         ]);
     }
 
     /**
-     * Ver dados pÃºblicos da loja
+     * Ver dados públicos da loja.
      */
     public function show(string $subdomain): JsonResponse
     {
@@ -63,7 +75,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Listar categorias ativas
+     * Listar categorias ativas.
      */
     public function categories(string $subdomain): JsonResponse
     {
@@ -83,7 +95,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Listar produtos
+     * Listar produtos.
      */
     public function products(Request $request, string $subdomain): JsonResponse
     {
@@ -121,7 +133,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Ver produto especÃ­fico
+     * Ver produto específico.
      */
     public function product(string $subdomain, string $slug): JsonResponse
     {
@@ -148,7 +160,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Listar kits
+     * Listar kits.
      */
     public function kits(string $subdomain): JsonResponse
     {
@@ -168,7 +180,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Listar banners
+     * Listar banners.
      */
     public function banners(string $subdomain): JsonResponse
     {
@@ -188,7 +200,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Listar bairros de entrega
+     * Listar bairros de entrega.
      */
     public function neighborhoods(string $subdomain): JsonResponse
     {
@@ -207,7 +219,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Calcular entrega
+     * Calcular entrega.
      */
     public function calculateDelivery(Request $request, string $subdomain): JsonResponse
     {
@@ -245,7 +257,7 @@ class StorefrontController extends Controller
     }
 
     /**
-     * Fazer pedido (checkout)
+     * Fazer pedido (checkout).
      */
     public function checkout(Request $request, string $subdomain): JsonResponse
     {
@@ -300,7 +312,7 @@ class StorefrontController extends Controller
         if ($subtotal < $minimumOrder) {
             return response()->json([
                 'success' => false,
-                'message' => 'Pedido mÃ­nimo: R$ ' . number_format((float) $minimumOrder, 2, ',', '.'),
+                'message' => 'Pedido mínimo: R$ ' . number_format((float) $minimumOrder, 2, ',', '.'),
             ], 422);
         }
 
@@ -357,6 +369,9 @@ class StorefrontController extends Controller
         ], 201);
     }
 
+    /**
+     * Resolve os itens do checkout usando apenas dados válidos da loja.
+     */
     private function resolveCheckoutItems(Store $store, array $rawItems): Collection
     {
         $productIds = collect($rawItems)
@@ -377,7 +392,7 @@ class StorefrontController extends Controller
 
             if (!$product) {
                 throw ValidationException::withMessages([
-                    "items.{$index}.product_id" => ['Produto invÃ¡lido para esta loja.'],
+                    "items.{$index}.product_id" => ['Produto inválido para esta loja.'],
                 ]);
             }
 
@@ -399,6 +414,9 @@ class StorefrontController extends Controller
         });
     }
 
+    /**
+     * Resolve a variação ativa informada no item do checkout.
+     */
     private function resolveVariation(Product $product, array $item, int $index): ?ProductVariation
     {
         if (empty($item['variation_id'])) {
@@ -409,15 +427,29 @@ class StorefrontController extends Controller
 
         if (!$variation) {
             throw ValidationException::withMessages([
-                "items.{$index}.variation_id" => ['VariaÃ§Ã£o invÃ¡lida para este produto.'],
+                "items.{$index}.variation_id" => ['Variação inválida para este produto.'],
             ]);
         }
 
         return $variation;
     }
 
+    /**
+     * Resolve a gramatura do item e protege o checkout de produtos mal configurados.
+     */
     private function resolveGramage(Product $product, array $item, int $index): int
     {
+        if (
+            $product->min_gramage === null
+            || $product->max_gramage === null
+            || $product->gramage_step === null
+            || $product->gramage_step <= 0
+        ) {
+            throw ValidationException::withMessages([
+                "items.{$index}.gramage" => ['Produto sem configuração de gramatura válida.'],
+            ]);
+        }
+
         $gramage = (int) ($item['gramage'] ?? $product->min_gramage);
 
         if ($gramage < $product->min_gramage || $gramage > $product->max_gramage) {
@@ -428,13 +460,16 @@ class StorefrontController extends Controller
 
         if ((($gramage - $product->min_gramage) % $product->gramage_step) !== 0) {
             throw ValidationException::withMessages([
-                "items.{$index}.gramage" => ['Gramatura invÃ¡lida para o step configurado deste produto.'],
+                "items.{$index}.gramage" => ['Gramatura inválida para o step configurado deste produto.'],
             ]);
         }
 
         return $gramage;
     }
 
+    /**
+     * Calcula o preço unitário do item com base em gramatura e variação.
+     */
     private function calculateUnitPrice(Product $product, ?ProductVariation $variation, int $gramage): float
     {
         $basePrice = (float) ($product->discount_price ?? $product->price);

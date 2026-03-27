@@ -5,6 +5,9 @@ import api from '@/services/api';
 import { useCartStore } from '@/stores/cartStore';
 import { Store, Category, Product, Banner } from '@/types';
 
+/**
+ * Renderiza a home publica da loja com destaques, categorias e atalhos de compra.
+ */
 export default function StoreHome() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -20,6 +23,9 @@ export default function StoreHome() {
   
   const { itemCount } = useCartStore();
 
+  /**
+   * Busca os dados publicos principais da loja em paralelo.
+   */
   const fetchData = async () => {
     try {
       const [storeRes, categoriesRes, productsRes, bannersRes] = await Promise.all([
@@ -39,6 +45,9 @@ export default function StoreHome() {
   };
 
   useEffect(() => {
+    /**
+     * Recarrega a home sempre que o slug da loja muda.
+     */
     const load = async () => {
       setLoading(true);
       await fetchData();
@@ -47,22 +56,34 @@ export default function StoreHome() {
     load();
   }, [slug]);
 
+  /**
+   * Atualiza manualmente os dados da home da loja.
+   */
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
   };
 
+  /**
+   * Formata o preco exibido nos cards de produto.
+   */
   const formatPrice = (price: number) => {
     return 'R$ ' + price.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Abre o canal de WhatsApp configurado para a loja.
+   */
   const handleWhatsApp = () => {
     if (store?.whatsapp_link) {
       Linking.openURL(store.whatsapp_link);
     }
   };
 
+  /**
+   * Renderiza um card de produto em destaque na home da loja.
+   */
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.productCard}

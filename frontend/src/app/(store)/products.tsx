@@ -4,6 +4,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import api from '@/services/api';
 import { Product, Category } from '@/types';
 
+/**
+ * Lista os produtos publicos da loja com filtros de categoria e busca.
+ */
 export default function ProductsList() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -18,6 +21,9 @@ export default function ProductsList() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(categoryId ? parseInt(categoryId) : null);
 
+  /**
+   * Busca os produtos publicos respeitando filtro e busca atuais.
+   */
   const fetchProducts = async () => {
     try {
       const params: any = {};
@@ -31,6 +37,9 @@ export default function ProductsList() {
     }
   };
 
+  /**
+   * Carrega as categorias publicas da loja para o filtro da tela.
+   */
   const fetchCategories = async () => {
     try {
       const response = await api.getClient().get(`/public/stores/${storeSlug}/categories`);
@@ -41,6 +50,9 @@ export default function ProductsList() {
   };
 
   useEffect(() => {
+    /**
+     * Carrega o conteudo inicial da listagem publica.
+     */
     const load = async () => {
       setLoading(true);
       await Promise.all([fetchProducts(), fetchCategories()]);
@@ -56,16 +68,25 @@ export default function ProductsList() {
     return () => clearTimeout(debounce);
   }, [search, selectedCategory]);
 
+  /**
+   * Atualiza manualmente a grade de produtos.
+   */
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchProducts();
     setRefreshing(false);
   };
 
+  /**
+   * Formata o preco exibido em cada card de produto.
+   */
   const formatPrice = (price: number) => {
     return 'R$ ' + price.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Renderiza um card de produto na grade publica da loja.
+   */
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.productCard}

@@ -9,20 +9,21 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
     /**
-     * Listar produtos da loja
+     * Listar produtos da loja.
      */
     public function index(Request $request): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $query = Product::where('store_id', $store->id)
             ->with('category', 'variations');
 
-        // Filtros
+        // Filtros.
         if ($request->has('category_id')) {
             $query->where('category_id', $request->category_id);
         }
@@ -39,7 +40,7 @@ class ProductController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -53,13 +54,13 @@ class ProductController extends Controller
     }
 
     /**
-     * Criar produto
+     * Criar produto.
      */
     public function store(Request $request): JsonResponse
     {
         $store = $request->user()->store;
 
-        // Verificar limite do plano
+        // Verificar limite do plano.
         if (!$store->canAddProduct()) {
             return response()->json([
                 'success' => false,
@@ -92,8 +93,9 @@ class ProductController extends Controller
 
         $validated['store_id'] = $store->id;
         $validated['slug'] = Str::slug($validated['name']);
+        $this->validateGramageConfiguration($validated);
 
-        // Garantir slug único
+        // Garantir slug único.
         $count = Product::where('store_id', $store->id)
             ->where('slug', 'like', $validated['slug'] . '%')
             ->count();
@@ -103,7 +105,7 @@ class ProductController extends Controller
 
         $product = Product::create($validated);
 
-        // Criar variações
+        // Criar variações.
         if (!empty($validated['variations'])) {
             foreach ($validated['variations'] as $variation) {
                 ProductVariation::create([
@@ -122,12 +124,12 @@ class ProductController extends Controller
     }
 
     /**
-     * Ver produto
+     * Ver produto.
      */
     public function show(Request $request, int $id): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)
             ->with('category', 'variations', 'allVariations')
             ->findOrFail($id);
@@ -139,12 +141,12 @@ class ProductController extends Controller
     }
 
     /**
-     * Atualizar produto
+     * Atualizar produto.
      */
     public function update(Request $request, int $id): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($id);
 
         $validated = $request->validate([
@@ -171,6 +173,12 @@ class ProductController extends Controller
             $validated['slug'] = Str::slug($validated['name']);
         }
 
+        $this->validateGramageConfiguration([
+            'min_gramage' => array_key_exists('min_gramage', $validated) ? $validated['min_gramage'] : $product->min_gramage,
+            'max_gramage' => array_key_exists('max_gramage', $validated) ? $validated['max_gramage'] : $product->max_gramage,
+            'gramage_step' => array_key_exists('gramage_step', $validated) ? $validated['gramage_step'] : $product->gramage_step,
+        ]);
+
         $product->update($validated);
 
         return response()->json([
@@ -181,19 +189,19 @@ class ProductController extends Controller
     }
 
     /**
-     * Deletar produto
+     * Deletar produto.
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($id);
 
-        // Verificar se tem pedidos
+        // Verificar se tem pedidos.
         if ($product->orderItems()->count() > 0) {
-            // Só desativar ao invés de excluir
+            // Só desativar ao invés de excluir.
             $product->update(['is_active' => false]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Produto desativado (possui pedidos associados)',
@@ -209,12 +217,12 @@ class ProductController extends Controller
     }
 
     /**
-     * Ativar/Desativar produto
+     * Ativar ou desativar produto.
      */
     public function toggle(Request $request, int $id): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($id);
 
         $product->update(['is_active' => !$product->is_active]);
@@ -226,13 +234,14 @@ class ProductController extends Controller
         ]);
     }
 
-    // Variações
+    /**
+     * Listar todas as variações do produto, incluindo inativas.
+     */
     public function variations(Request $request, int $productId): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($productId);
-        
         $variations = $product->allVariations;
 
         return response()->json([
@@ -241,10 +250,13 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * Criar uma variação para o produto da loja.
+     */
     public function storeVariation(Request $request, int $productId): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($productId);
 
         $validated = $request->validate([
@@ -262,10 +274,13 @@ class ProductController extends Controller
         ], 201);
     }
 
+    /**
+     * Atualizar uma variação existente do produto.
+     */
     public function updateVariation(Request $request, int $productId, int $variationId): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($productId);
         $variation = $product->allVariations()->findOrFail($variationId);
 
@@ -284,10 +299,13 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * Excluir uma variação do produto.
+     */
     public function destroyVariation(Request $request, int $productId, int $variationId): JsonResponse
     {
         $store = $request->user()->store;
-        
+
         $product = Product::where('store_id', $store->id)->findOrFail($productId);
         $variation = $product->allVariations()->findOrFail($variationId);
 
@@ -297,5 +315,49 @@ class ProductController extends Controller
             'success' => true,
             'message' => 'Variação excluída com sucesso',
         ]);
+    }
+
+    /**
+     * Garante que o produto tenha uma configuração de gramatura completa e consistente.
+     */
+    private function validateGramageConfiguration(array $data): void
+    {
+        $fields = ['min_gramage', 'max_gramage', 'gramage_step'];
+        $missingFields = array_filter(
+            $fields,
+            static fn (string $field): bool => !array_key_exists($field, $data) || $data[$field] === null
+        );
+
+        if ($missingFields !== []) {
+            $message = 'Informe peso mínimo, máximo e step para o produto.';
+
+            throw ValidationException::withMessages([
+                'min_gramage' => [$message],
+                'max_gramage' => [$message],
+                'gramage_step' => [$message],
+            ]);
+        }
+
+        $minGramage = (int) $data['min_gramage'];
+        $maxGramage = (int) $data['max_gramage'];
+        $gramageStep = (int) $data['gramage_step'];
+
+        if ($maxGramage < $minGramage) {
+            throw ValidationException::withMessages([
+                'max_gramage' => ['A gramatura máxima deve ser maior ou igual à mínima.'],
+            ]);
+        }
+
+        if ($gramageStep <= 0) {
+            throw ValidationException::withMessages([
+                'gramage_step' => ['O step de gramatura deve ser maior que zero.'],
+            ]);
+        }
+
+        if ((($maxGramage - $minGramage) % $gramageStep) !== 0) {
+            throw ValidationException::withMessages([
+                'gramage_step' => ['O step de gramatura deve dividir o intervalo entre mínimo e máximo.'],
+            ]);
+        }
     }
 }

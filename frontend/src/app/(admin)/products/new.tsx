@@ -1,6 +1,9 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+/**
+ * Renderiza a tela placeholder para criacao de produto no painel administrativo.
+ */
 export default function NewProductScreen() {
   const router = useRouter();
 

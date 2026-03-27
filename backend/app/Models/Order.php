@@ -60,7 +60,7 @@ class Order extends Model
         });
     }
 
-    // Constantes de status
+    // Constantes de status.
     public const STATUS_PENDING = 'pending';
     public const STATUS_CONFIRMED = 'confirmed';
     public const STATUS_PREPARING = 'preparing';
@@ -68,41 +68,57 @@ class Order extends Model
     public const STATUS_DISPATCHED = 'dispatched';
     public const STATUS_CANCELED = 'canceled';
 
-    // Métodos auxiliares
+    /**
+     * Gera um identificador legivel para novos pedidos.
+     */
     public function generateOrderNumber(): string
     {
         $date = now()->format('Ymd');
         $random = strtoupper(Str::random(4));
+
         return "PED-{$date}-{$random}";
     }
 
-    // Scopes
+    /**
+     * Restringe a consulta aos pedidos pendentes.
+     */
     public function scopePending($query)
     {
         return $query->where('status', self::STATUS_PENDING);
     }
 
+    /**
+     * Restringe a consulta aos pedidos ainda ativos.
+     */
     public function scopeActive($query)
     {
         return $query->whereNotIn('status', [self::STATUS_CANCELED]);
     }
 
-    // Accessors
+    /**
+     * Formata o total do pedido para exibicao monetaria.
+     */
     public function getFormattedTotalAttribute(): string
     {
         return 'R$ ' . number_format($this->total, 2, ',', '.');
     }
 
+    /**
+     * Formata a taxa de entrega ou informa entrega gratis.
+     */
     public function getFormattedDeliveryFeeAttribute(): string
     {
-        return $this->delivery_fee > 0 
+        return $this->delivery_fee > 0
             ? 'R$ ' . number_format($this->delivery_fee, 2, ',', '.')
             : 'Grátis';
     }
 
+    /**
+     * Traduz o status interno para um rotulo amigavel.
+     */
     public function getStatusLabelAttribute(): string
     {
-        return match($this->status) {
+        return match ($this->status) {
             self::STATUS_PENDING => 'Pendente',
             self::STATUS_CONFIRMED => 'Confirmado',
             self::STATUS_PREPARING => 'Preparando',
@@ -113,6 +129,9 @@ class Order extends Model
         };
     }
 
+    /**
+     * Concatena os campos de endereco disponiveis do pedido.
+     */
     public function getFullAddressAttribute(): string
     {
         $parts = array_filter([
@@ -125,39 +144,55 @@ class Order extends Model
         return implode(', ', $parts);
     }
 
+    /**
+     * Expõe ao frontend se o pedido ainda pode ser cancelado.
+     */
     public function getCanBeCanceledAttribute(): bool
     {
         return $this->canBeCanceled();
     }
 
+    /**
+     * Expõe ao frontend se o status do pedido ainda pode ser alterado.
+     */
     public function getCanChangeStatusAttribute(): bool
     {
         return $this->canChangeStatus();
     }
 
-    // Relações
+    /**
+     * Retorna a loja dona do pedido.
+     */
     public function store()
     {
         return $this->belongsTo(Store::class);
     }
 
+    /**
+     * Retorna os itens associados ao pedido.
+     */
     public function items()
     {
         return $this->hasMany(OrderItem::class);
     }
 
-    // Métodos
+    /**
+     * Recalcula o total com base em subtotal, entrega e desconto.
+     */
     public function calculateTotal(): float
     {
         return $this->subtotal + $this->delivery_fee - $this->discount;
     }
 
+    /**
+     * Monta a mensagem de WhatsApp usada para encaminhar o pedido.
+     */
     public function generateWhatsappMessage(): string
     {
         $message = "*Novo Pedido - {$this->order_number}*\n\n";
         $message .= "*Cliente:* {$this->customer_name}\n";
         $message .= "*Telefone:* {$this->customer_phone}\n\n";
-        
+
         if ($this->delivery_address) {
             $message .= "*Endereço:* {$this->full_address}\n";
             if ($this->delivery_reference) {
@@ -165,59 +200,62 @@ class Order extends Model
             }
             $message .= "\n";
         }
-        
+
         $message .= "*Itens do pedido:*\n";
-        
+
         foreach ($this->items as $item) {
             $message .= "\n{$item->quantity}x {$item->product_name}";
-            
+
             if ($item->variation_name) {
                 $message .= " ({$item->variation_name})";
             }
-            
+
             if ($item->gramage) {
                 $message .= " - {$item->gramage}g";
             }
-            
+
             $message .= "\nR$ " . number_format($item->subtotal, 2, ',', '.');
-            
+
             if ($item->observations) {
                 $message .= "\nObs: {$item->observations}";
             }
         }
-        
+
         $message .= "\n\n*Subtotal:* R$ " . number_format($this->subtotal, 2, ',', '.');
         $message .= "\n*Entrega:* {$this->formatted_delivery_fee}";
-        
+
         if ($this->discount > 0) {
             $message .= "\n*Desconto:* -R$ " . number_format($this->discount, 2, ',', '.');
         }
-        
+
         $message .= "\n*Total:* R$ " . number_format($this->total, 2, ',', '.');
-        
+
         if ($this->payment_method) {
-            $paymentLabel = match($this->payment_method) {
+            $paymentLabel = match ($this->payment_method) {
                 'money' => 'Dinheiro',
                 'pix' => 'PIX',
                 'card' => 'Cartão',
                 'transfer' => 'Transferência',
-                default => $this->payment_method
+                default => $this->payment_method,
             };
-            
+
             $message .= "\n*Pagamento:* {$paymentLabel}";
-            
+
             if ($this->payment_method === 'money' && $this->change_for) {
                 $message .= "\n*Troco para:* R$ " . number_format($this->change_for, 2, ',', '.');
             }
         }
-        
+
         if ($this->admin_notes) {
             $message .= "\n\n*Observações:* {$this->admin_notes}";
         }
-        
+
         return $message;
     }
 
+    /**
+     * Informa se o pedido ainda pode ser cancelado pelo fluxo operacional.
+     */
     public function canBeCanceled(): bool
     {
         return in_array($this->status, [
@@ -226,6 +264,9 @@ class Order extends Model
         ]);
     }
 
+    /**
+     * Informa se o pedido ainda aceita transicoes de status.
+     */
     public function canChangeStatus(): bool
     {
         return $this->status !== self::STATUS_CANCELED;

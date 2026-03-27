@@ -5,11 +5,17 @@ import api from '@/services/api';
 import { useCartStore } from '@/stores/cartStore';
 import { Product, ProductVariation } from '@/types';
 
+/**
+ * Exibe os detalhes do produto da vitrine e permite adiciona-lo ao carrinho.
+ */
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const slug = params.slug as string;
-  const storeSlug = (params.store as string) || 'demo';
+  const { slug: rawSlug, store: rawStore } = useLocalSearchParams<{
+    slug?: string | string[];
+    store?: string | string[];
+  }>();
+  const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
+  const storeSlug = (Array.isArray(rawStore) ? rawStore[0] : rawStore) || 'demo';
 
   const { addItem, setStore } = useCartStore();
   const [product, setProduct] = useState<Product | null>(null);
@@ -17,7 +23,18 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    /**
+     * Carrega o produto da vitrine e seleciona a primeira variacao disponivel.
+     */
     const loadProduct = async () => {
+      if (!slug) {
+        Alert.alert('Erro', 'Nao foi possivel carregar o produto', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await api.getClient().get(`/public/stores/${storeSlug}/products/${slug}`);
         const fetchedProduct = response.data.data as Product;
@@ -25,8 +42,9 @@ export default function ProductDetailScreen() {
         setSelectedVariation(fetchedProduct.variations?.[0]);
       } catch (error) {
         console.error('Error fetching product:', error);
-        Alert.alert('Erro', 'Nao foi possivel carregar o produto');
-        router.back();
+        Alert.alert('Erro', 'Nao foi possivel carregar o produto', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
       } finally {
         setLoading(false);
       }
@@ -35,10 +53,16 @@ export default function ProductDetailScreen() {
     loadProduct();
   }, [router, slug, storeSlug]);
 
+  /**
+   * Formata um preco numerico para o padrao monetario exibido na loja.
+   */
   const formatPrice = (price: number) => {
     return 'R$ ' + price.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Adiciona o produto atual ao carrinho usando a variacao selecionada.
+   */
   const handleAddToCart = () => {
     if (!product) {
       return;
@@ -74,7 +98,7 @@ export default function ProductDetailScreen() {
       </View>
 
       <Text style={styles.name}>{product.name}</Text>
-      <Text style={styles.price}>{formatPrice(product.discount_price || product.price)}/kg</Text>
+      <Text style={styles.price}>{formatPrice(product.discount_price ?? product.price)}/kg</Text>
 
       {product.description ? (
         <Text style={styles.description}>{product.description}</Text>

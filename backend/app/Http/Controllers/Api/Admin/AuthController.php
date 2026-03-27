@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     /**
-     * Registrar novo usuário (Super Admin ou Dono de Loja)
+     * Registrar novo usuário (Super Admin ou Dono de Loja).
      */
     public function register(Request $request): JsonResponse
     {
@@ -45,7 +45,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Login de usuário
+     * Login de usuário.
      */
     public function login(Request $request): JsonResponse
     {
@@ -81,7 +81,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout
+     * Logout.
      */
     public function logout(Request $request): JsonResponse
     {
@@ -94,7 +94,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Dados do usuário logado
+     * Dados do usuário logado.
      */
     public function me(Request $request): JsonResponse
     {
@@ -107,7 +107,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Atualizar perfil
+     * Atualizar perfil.
      */
     public function updateProfile(Request $request): JsonResponse
     {
@@ -128,7 +128,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Alterar senha
+     * Alterar senha.
      */
     public function changePassword(Request $request): JsonResponse
     {
@@ -149,7 +149,7 @@ class AuthController extends Controller
             'password' => $request->password,
         ]);
 
-        // Invalidar outros tokens (opcional)
+        // Invalidar outros tokens (opcional).
         // $user->tokens()->where('id', '!=', $user->currentAccessTokenId())->delete();
 
         return response()->json([
@@ -159,15 +159,14 @@ class AuthController extends Controller
     }
 
     /**
-     * Esqueci a senha - enviar email de reset
+     * Esqueci a senha e enviar email de reset.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
         $request->validate(['email' => ['required', 'email']]);
 
-        // Aqui você enviaria o email com o link de reset
-        // Por agora, retornamos sucesso simulado
-
+        // Aqui você enviaria o email com o link de reset.
+        // Por agora, retornamos sucesso simulado.
         return response()->json([
             'success' => true,
             'message' => 'Se o email existir, você receberá um link de recuperação.',
@@ -175,7 +174,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Reset de senha
+     * Reset de senha.
      */
     public function resetPassword(Request $request): JsonResponse
     {
@@ -185,9 +184,8 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        // Aqui você validaria o token e resetaria a senha
-        // Por agora, retornamos sucesso simulado
-
+        // Aqui você validaria o token e resetaria a senha.
+        // Por agora, retornamos sucesso simulado.
         return response()->json([
             'success' => true,
             'message' => 'Senha resetada com sucesso',

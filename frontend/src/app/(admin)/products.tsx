@@ -4,6 +4,9 @@ import { useRouter } from 'expo-router';
 import api from '@/services/api';
 import { Product, Category } from '@/types';
 
+/**
+ * Lista os produtos da loja e oferece acoes rapidas de busca e ativacao.
+ */
 export default function ProductsScreen() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
@@ -13,6 +16,9 @@ export default function ProductsScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
+  /**
+   * Busca os produtos aplicando filtros de busca e categoria.
+   */
   const fetchProducts = async () => {
     try {
       const params: any = {};
@@ -26,6 +32,9 @@ export default function ProductsScreen() {
     }
   };
 
+  /**
+   * Carrega as categorias disponiveis para o filtro da tela.
+   */
   const fetchCategories = async () => {
     try {
       const response = await api.getClient().get('/stores/me/categories');
@@ -36,6 +45,9 @@ export default function ProductsScreen() {
   };
 
   useEffect(() => {
+    /**
+     * Carrega os dados iniciais do painel de produtos.
+     */
     const load = async () => {
       setLoading(true);
       await Promise.all([fetchProducts(), fetchCategories()]);
@@ -52,12 +64,18 @@ export default function ProductsScreen() {
     return () => clearTimeout(debounce);
   }, [search, selectedCategory]);
 
+  /**
+   * Atualiza manualmente a lista de produtos.
+   */
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchProducts();
     setRefreshing(false);
   };
 
+  /**
+   * Alterna o status ativo do produto selecionado.
+   */
   const toggleProduct = async (product: Product) => {
     try {
       await api.getClient().put(`/stores/me/products/${product.id}/toggle`);
@@ -67,10 +85,16 @@ export default function ProductsScreen() {
     }
   };
 
+  /**
+   * Formata o preco para exibicao em reais.
+   */
   const formatPrice = (price: number) => {
     return 'R$ ' + price.toFixed(2).replace('.', ',');
   };
 
+  /**
+   * Renderiza um card resumido de produto na listagem administrativa.
+   */
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={[styles.productCard, !item.is_active && styles.productCardInactive]}
