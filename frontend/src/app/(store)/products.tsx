@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Image, RefreshControl } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import api from '../../src/services/api';
-import { Product, Category } from '../../src/types';
+import api from '@/services/api';
+import { Product, Category } from '@/types';
 
 export default function ProductsList() {
   const router = useRouter();

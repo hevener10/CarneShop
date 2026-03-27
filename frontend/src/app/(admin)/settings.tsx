@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../src/stores/authStore';
-import api from '../src/services/api';
+import api from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function SettingsScreen() {
   const router = useRouter();

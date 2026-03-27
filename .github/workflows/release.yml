@@ -1,0 +1,379 @@
+name: Mobile Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  NODE_VERSION: '20'
+  PHP_VERSION: '8.4'
+
+jobs:
+  release-android:
+    name: Build Android Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      APP_NAME: ${{ vars.APP_NAME }}
+      APP_ENV: production
+      APP_URL: ${{ vars.APP_URL }}
+      CENTRAL_DOMAINS: ${{ vars.CENTRAL_DOMAINS }}
+      LANDLORD_INTERNAL_API_TOKEN: ${{ secrets.LANDLORD_INTERNAL_API_TOKEN }}
+      TENANT_DOMAIN_PATTERN: ${{ vars.TENANT_DOMAIN_PATTERN }}
+      NATIVEPHP_APP_ID: ${{ vars.NATIVEPHP_APP_ID }}
+      NATIVEPHP_START_URL: ${{ vars.NATIVEPHP_START_URL }}
+      NATIVEPHP_DEEPLINK_SCHEME: ${{ vars.NATIVEPHP_DEEPLINK_SCHEME }}
+      NATIVEPHP_DEEPLINK_HOST: ${{ vars.NATIVEPHP_DEEPLINK_HOST }}
+      NATIVEPHP_ANDROID_MINIFY_ENABLED: ${{ vars.NATIVEPHP_ANDROID_MINIFY_ENABLED }}
+      NATIVEPHP_ANDROID_SHRINK_RESOURCES: ${{ vars.NATIVEPHP_ANDROID_SHRINK_RESOURCES }}
+      NATIVEPHP_ANDROID_OBFUSCATE: ${{ vars.NATIVEPHP_ANDROID_OBFUSCATE }}
+      NATIVEPHP_ANDROID_DEBUG_SYMBOLS: ${{ vars.NATIVEPHP_ANDROID_DEBUG_SYMBOLS }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      FCM_SERVER_KEY: ${{ secrets.FCM_SERVER_KEY }}
+      PUBLISH_ANDROID_TO_PLAY_STORE: ${{ vars.PUBLISH_ANDROID_TO_PLAY_STORE }}
+      PLAY_STORE_TRACK: ${{ vars.PLAY_STORE_TRACK }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, mbstring, openssl, pdo_sqlite, simplexml, sqlite3, xml, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-php-${{ env.PHP_VERSION }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ env.PHP_VERSION }}-composer-
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-release-${{ hashFiles('nativephp/android/**/*.gradle*', 'nativephp/android/**/gradle-wrapper.properties', 'nativephp/android/gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-release-
+
+      - name: Validate Android release configuration
+        run: |
+          test -n "${ANDROID_KEYSTORE_BASE64}" || { echo "Missing secret ANDROID_KEYSTORE_BASE64"; exit 1; }
+          test -n "${ANDROID_KEYSTORE_PASSWORD}" || { echo "Missing secret ANDROID_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "${ANDROID_KEY_ALIAS}" || { echo "Missing secret ANDROID_KEY_ALIAS"; exit 1; }
+          test -n "${ANDROID_KEY_PASSWORD}" || { echo "Missing secret ANDROID_KEY_PASSWORD"; exit 1; }
+          if [ "${PUBLISH_ANDROID_TO_PLAY_STORE:-false}" = "true" ] && [ -z "${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}" ]; then
+            echo "PUBLISH_ANDROID_TO_PLAY_STORE=true requires GOOGLE_SERVICE_ACCOUNT_JSON_BASE64"
+            exit 1
+          fi
+
+      - name: Prepare release environment
+        run: |
+          chmod +x scripts/ci/prepare-env.sh
+          scripts/ci/prepare-env.sh
+
+      - name: Install Android packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.0.12077973" \
+            "cmake;3.22.1"
+
+      - name: Initialize Android build log
+        run: |
+          mkdir -p nativephp .artifacts/android
+          : > nativephp/android-build.log
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build web assets for mobile bundle
+        run: npm run production
+
+      - name: Install NativePHP Android project
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_SDK_ROOT is not available" >&2
+            exit 1
+          fi
+
+          export ANDROID_HOME="$SDK_ROOT"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          export NATIVEPHP_ANDROID_SDK_LOCATION="$SDK_ROOT"
+
+          php artisan native:install android --force --without-icu --no-interaction
+
+      - name: Patch NativePHP Android unzip implementation
+        run: php scripts/ci/patch-nativephp-android-unzip.php
+
+      - name: Build signed Android bundle
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_SDK_ROOT is not available" >&2
+            exit 1
+          fi
+
+          export ANDROID_HOME="$SDK_ROOT"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          export NATIVEPHP_ANDROID_SDK_LOCATION="$SDK_ROOT"
+
+          ANDROID_ARGS=(android --build-type=bundle --output=.artifacts/android --no-tty)
+
+          if [ "${PUBLISH_ANDROID_TO_PLAY_STORE:-false}" = "true" ]; then
+            ANDROID_ARGS+=(--upload-to-play-store)
+            if [ -n "${PLAY_STORE_TRACK:-}" ]; then
+              ANDROID_ARGS+=(--play-store-track="${PLAY_STORE_TRACK}")
+            fi
+          fi
+
+          php artisan native:package "${ANDROID_ARGS[@]}"
+
+      - name: Build signed Android APK from prepared project
+        run: |
+          chmod +x nativephp/android/gradlew
+          (
+            cd nativephp/android
+            ./gradlew assembleRelease
+          )
+
+      - name: Collect Android artifacts
+        if: always()
+        run: |
+          mkdir -p .artifacts/android
+          cp nativephp/android-build.log .artifacts/android/android-build.log
+
+          if [ -f nativephp/android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp nativephp/android/app/build/outputs/bundle/release/app-release.aab .artifacts/android/app-release.aab
+          fi
+
+          find nativephp/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -exec cp {} .artifacts/android/ \;
+
+          if [ -f nativephp/android/app/src/main/assets/laravel_bundle.zip ]; then
+            cp nativephp/android/app/src/main/assets/laravel_bundle.zip .artifacts/android/laravel_bundle.zip
+          fi
+
+      - name: Upload Android publication artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: .artifacts/android
+          if-no-files-found: error
+          retention-days: 14
+
+  release-ios:
+    name: Build iOS Release
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      APP_NAME: ${{ vars.APP_NAME }}
+      APP_ENV: production
+      APP_URL: ${{ vars.APP_URL }}
+      CENTRAL_DOMAINS: ${{ vars.CENTRAL_DOMAINS }}
+      LANDLORD_INTERNAL_API_TOKEN: ${{ secrets.LANDLORD_INTERNAL_API_TOKEN }}
+      TENANT_DOMAIN_PATTERN: ${{ vars.TENANT_DOMAIN_PATTERN }}
+      NATIVEPHP_APP_ID: ${{ vars.NATIVEPHP_APP_ID }}
+      NATIVEPHP_START_URL: ${{ vars.NATIVEPHP_START_URL }}
+      NATIVEPHP_DEEPLINK_SCHEME: ${{ vars.NATIVEPHP_DEEPLINK_SCHEME }}
+      NATIVEPHP_DEEPLINK_HOST: ${{ vars.NATIVEPHP_DEEPLINK_HOST }}
+      NATIVEPHP_DEVELOPMENT_TEAM: ${{ vars.IOS_TEAM_ID }}
+      IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      IOS_DISTRIBUTION_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_DISTRIBUTION_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_API_KEY_BASE64: ${{ secrets.APP_STORE_API_KEY_BASE64 }}
+      APP_STORE_API_KEY_ID: ${{ vars.APP_STORE_API_KEY_ID }}
+      APP_STORE_API_ISSUER_ID: ${{ vars.APP_STORE_API_ISSUER_ID }}
+      APP_STORE_APP_NAME: ${{ vars.APP_STORE_APP_NAME }}
+      GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+      PUBLISH_IOS_TO_APP_STORE: ${{ vars.PUBLISH_IOS_TO_APP_STORE }}
+      IOS_EXPORT_METHOD: ${{ vars.IOS_EXPORT_METHOD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, mbstring, openssl, pdo_sqlite, simplexml, sqlite3, xml, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/composer/files
+          key: ${{ runner.os }}-php-${{ env.PHP_VERSION }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ env.PHP_VERSION }}-composer-
+
+      - name: Validate iOS release configuration
+        run: |
+          test -n "${IOS_DISTRIBUTION_CERTIFICATE_BASE64}" || { echo "Missing secret IOS_DISTRIBUTION_CERTIFICATE_BASE64"; exit 1; }
+          test -n "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD}" || { echo "Missing secret IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"; exit 1; }
+          test -n "${IOS_DISTRIBUTION_PROVISIONING_PROFILE_BASE64}" || { echo "Missing secret IOS_DISTRIBUTION_PROVISIONING_PROFILE_BASE64"; exit 1; }
+          test -n "${IOS_TEAM_ID}" || { echo "Missing variable IOS_TEAM_ID"; exit 1; }
+          if [ "${PUBLISH_IOS_TO_APP_STORE:-false}" = "true" ]; then
+            test -n "${APP_STORE_API_KEY_BASE64}" || { echo "Missing secret APP_STORE_API_KEY_BASE64"; exit 1; }
+            test -n "${APP_STORE_API_KEY_ID}" || { echo "Missing variable APP_STORE_API_KEY_ID"; exit 1; }
+            test -n "${APP_STORE_API_ISSUER_ID}" || { echo "Missing variable APP_STORE_API_ISSUER_ID"; exit 1; }
+          fi
+
+      - name: Prepare release environment
+        run: |
+          chmod +x scripts/ci/prepare-env.sh
+          scripts/ci/prepare-env.sh
+
+      - name: Initialize iOS build log
+        run: |
+          mkdir -p nativephp .artifacts/ios
+          : > nativephp/ios-build.log
+
+      - name: Verify Xcode and CocoaPods
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          if ! command -v pod >/dev/null 2>&1; then
+            brew install cocoapods
+          fi
+          pod --version
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build web assets for mobile bundle
+        run: npm run production
+
+      - name: Install NativePHP iOS project
+        run: php artisan native:install ios --force --no-interaction
+
+      - name: Build signed iOS package
+        run: |
+          IOS_ARGS=(ios --build-type=release --output=.artifacts/ios --clean-caches --no-tty)
+
+          if [ -n "${IOS_EXPORT_METHOD:-}" ]; then
+            IOS_ARGS+=(--export-method="${IOS_EXPORT_METHOD}")
+          fi
+
+          if [ "${PUBLISH_IOS_TO_APP_STORE:-false}" = "true" ]; then
+            IOS_ARGS+=(--upload-to-app-store)
+          fi
+
+          php artisan native:package "${IOS_ARGS[@]}"
+
+      - name: Collect iOS artifacts
+        if: always()
+        run: |
+          mkdir -p .artifacts/ios
+          cp nativephp/ios-build.log .artifacts/ios/ios-build.log
+
+          if [ -f nativephp/ios/build/export/NativePHP.ipa ] && [ ! -f .artifacts/ios/NativePHP.ipa ]; then
+            cp nativephp/ios/build/export/NativePHP.ipa .artifacts/ios/NativePHP.ipa
+          fi
+
+          if [ -d nativephp/ios/build/NativePHP.xcarchive ]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              nativephp/ios/build/NativePHP.xcarchive \
+              .artifacts/ios/NativePHP.xcarchive.zip
+          fi
+
+      - name: Upload iOS publication artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: .artifacts/ios
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-github-release:
+    name: Publish GitHub Release Assets
+    runs-on: ubuntu-24.04
+    needs:
+      - release-android
+      - release-ios
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download Android release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: .release-assets/android
+
+      - name: Download iOS release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-release
+          path: .release-assets/ios
+
+      - name: Build release notes
+        run: |
+          {
+            echo "## Publicacao mobile"
+            echo
+            echo "- Android: APK e AAB assinados anexados nesta release."
+            echo "- iOS: IPA e archive assinados anexados nesta release."
+          } > .release-assets/release-notes.md
+
+      - name: Create GitHub release with assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .release-assets/android/*
+            .release-assets/ios/*
+          body_path: .release-assets/release-notes.md
+          generate_release_notes: true

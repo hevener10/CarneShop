@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import api from '../src/services/api';
-import { Product, Category } from '../src/types';
+import api from '@/services/api';
+import { Product, Category } from '@/types';
 
 export default function ProductsScreen() {
   const router = useRouter();

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../src/stores/authStore';
-import api from '../src/services/api';
+import api from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Stats {
   today: { orders: number; revenue: number };

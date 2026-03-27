@@ -31,3 +31,4 @@ coverage/
 # Misc
 *.bak
 *.tmp
+dump.rdb

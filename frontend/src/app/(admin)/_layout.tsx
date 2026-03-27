@@ -1,7 +1,5 @@
-import { Stack } from 'expo-router';
-import { useEffect } from 'react';
-import { useAuthStore } from '../src/stores/authStore';
-import { Redirect } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function AdminLayout() {
   const { isAuthenticated, isLoading, user } = useAuthStore();

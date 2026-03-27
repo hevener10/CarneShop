@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, Modal, TextInput, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import api from '../src/services/api';
-import { Order } from '../src/types';
+import api from '@/services/api';
+import { Order } from '@/types';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#FFA500',

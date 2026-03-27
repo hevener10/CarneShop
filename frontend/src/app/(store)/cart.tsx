@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useCartStore } from '../../src/stores/cartStore';
-import api from '../../src/services/api';
 import * as Linking from 'expo-linking';
+import api from '@/services/api';
+import { useCartStore } from '@/stores/cartStore';
 
 export default function CartScreen() {
   const router = useRouter();

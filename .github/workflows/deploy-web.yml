@@ -1,0 +1,381 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Existing GHCR image tag to deploy. Leave blank to build the current commit.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-web-prod
+  cancel-in-progress: true
+
+env:
+  CI: true
+  NODE_VERSION: ${{ vars.NODE_VERSION != '' && vars.NODE_VERSION || '20' }}
+  PHP_VERSION: ${{ vars.PHP_VERSION != '' && vars.PHP_VERSION || '8.3' }}
+
+jobs:
+  resolve-config:
+    name: Resolve Deploy Configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: prod
+    outputs:
+      app_url: ${{ steps.resolve.outputs.app_url }}
+      container_name: ${{ steps.resolve.outputs.container_name }}
+      deploy_path: ${{ steps.resolve.outputs.deploy_path }}
+      deploy_ssh_port: ${{ steps.resolve.outputs.deploy_ssh_port }}
+      docker_image_name: ${{ steps.resolve.outputs.docker_image_name }}
+      expo_public_api_url: ${{ steps.resolve.outputs.expo_public_api_url }}
+      image_ref: ${{ steps.resolve.outputs.image_ref }}
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      should_build: ${{ steps.resolve.outputs.should_build }}
+      web_published_port: ${{ steps.resolve.outputs.web_published_port }}
+
+    steps:
+      - name: Resolve environment-backed variables
+        id: resolve
+        shell: bash
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_SSH_PORT: ${{ vars.DEPLOY_SSH_PORT }}
+          DOCKER_IMAGE_NAME: ${{ vars.DOCKER_IMAGE_NAME }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          WEB_PUBLISHED_PORT: ${{ vars.WEB_PUBLISHED_PORT }}
+        run: |
+          set -euo pipefail
+
+          docker_image_name="${DOCKER_IMAGE_NAME:-ghcr.io/${GITHUB_REPOSITORY_OWNER}/carneshop-web}"
+          container_name="${CONTAINER_NAME:-carneshop-web}"
+          deploy_path="${DEPLOY_PATH:-}"
+          deploy_ssh_port="${DEPLOY_SSH_PORT:-22}"
+          web_published_port="${WEB_PUBLISHED_PORT:-2060}"
+          app_url="${APP_URL:-}"
+          input_image_tag="${INPUT_IMAGE_TAG:-}"
+
+          if [ -z "$deploy_path" ]; then
+            echo "Missing required variable DEPLOY_PATH in the prod environment." >&2
+            exit 1
+          fi
+
+          if [ -z "$app_url" ]; then
+            echo "Missing required variable APP_URL in the prod environment." >&2
+            exit 1
+          fi
+
+          if ! [[ "$deploy_ssh_port" =~ ^[0-9]+$ ]]; then
+            echo "DEPLOY_SSH_PORT must be numeric." >&2
+            exit 1
+          fi
+
+          if ! [[ "$web_published_port" =~ ^[0-9]+$ ]]; then
+            echo "WEB_PUBLISHED_PORT must be numeric." >&2
+            exit 1
+          fi
+
+          if [ -n "$input_image_tag" ]; then
+            if ! [[ "$input_image_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+              echo "workflow_dispatch input image_tag is invalid." >&2
+              exit 1
+            fi
+
+            image_tag="$input_image_tag"
+            should_build=false
+          else
+            image_tag="sha-${GITHUB_SHA}"
+            should_build=true
+          fi
+
+          api_url="${EXPO_PUBLIC_API_URL:-${app_url%/}/api/v1}"
+          image_ref="${docker_image_name}:${image_tag}"
+
+          {
+            echo "app_url=${app_url}"
+            echo "container_name=${container_name}"
+            echo "deploy_path=${deploy_path}"
+            echo "deploy_ssh_port=${deploy_ssh_port}"
+            echo "docker_image_name=${docker_image_name}"
+            echo "expo_public_api_url=${api_url}"
+            echo "image_ref=${image_ref}"
+            echo "image_tag=${image_tag}"
+            echo "should_build=${should_build}"
+            echo "web_published_port=${web_published_port}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    name: Build and Publish Web Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs: resolve-config
+    if: needs.resolve-config.outputs.should_build == 'true'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo 'tags<<EOF'
+            echo "${{ needs.resolve-config.outputs.image_ref }}"
+            if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+              echo "${{ needs.resolve-config.outputs.docker_image_name }}:main"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            NODE_VERSION=${{ env.NODE_VERSION }}
+            PHP_VERSION=${{ env.PHP_VERSION }}
+            EXPO_PUBLIC_API_URL=${{ needs.resolve-config.outputs.expo_public_api_url }}
+          labels: |
+            org.opencontainers.image.title=CarneShop Web
+            org.opencontainers.image.description=Laravel plus Expo Web production container for CarneShop
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy Web Container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - resolve-config
+      - build-and-push
+    if: |
+      needs.resolve-config.result == 'success' &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+    environment: prod
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CONTAINER_NAME: ${{ needs.resolve-config.outputs.container_name }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PATH: ${{ needs.resolve-config.outputs.deploy_path }}
+      DEPLOY_SSH_PORT: ${{ needs.resolve-config.outputs.deploy_ssh_port }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      GHCR_DEPLOY_USERNAME: ${{ secrets.GHCR_DEPLOY_USERNAME }}
+      GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
+      IMAGE_REF: ${{ needs.resolve-config.outputs.image_ref }}
+      WEB_PUBLISHED_PORT: ${{ needs.resolve-config.outputs.web_published_port }}
+
+    steps:
+      - name: Validate deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_vars=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_SSH_PRIVATE_KEY
+            GHCR_DEPLOY_USERNAME
+            GHCR_DEPLOY_TOKEN
+            DEPLOY_PATH
+            IMAGE_REF
+            CONTAINER_NAME
+            WEB_PUBLISHED_PORT
+          )
+
+          for name in "${required_vars[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required configuration: ${name}" >&2
+              exit 1
+            fi
+          done
+
+          if ! [[ "${WEB_PUBLISHED_PORT}" =~ ^[0-9]+$ ]]; then
+            echo "WEB_PUBLISHED_PORT must be numeric." >&2
+            exit 1
+          fi
+
+      - name: Configure SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_SSH_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare remote directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deploy_path_q=$(printf '%q' "$DEPLOY_PATH")
+
+          ssh -p "$DEPLOY_SSH_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p ${deploy_path_q}/shared/storage"
+
+      - name: Deploy remote container
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deploy_path_q=$(printf '%q' "$DEPLOY_PATH")
+          container_name_q=$(printf '%q' "$CONTAINER_NAME")
+          image_ref_q=$(printf '%q' "$IMAGE_REF")
+          web_port_q=$(printf '%q' "$WEB_PUBLISHED_PORT")
+          ghcr_user_q=$(printf '%q' "$GHCR_DEPLOY_USERNAME")
+          ghcr_token_q=$(printf '%q' "$GHCR_DEPLOY_TOKEN")
+
+          ssh -p "$DEPLOY_SSH_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "CONTAINER_NAME=${container_name_q} DEPLOY_PATH=${deploy_path_q} IMAGE_REF=${image_ref_q} WEB_PUBLISHED_PORT=${web_port_q} GHCR_DEPLOY_USERNAME=${ghcr_user_q} GHCR_DEPLOY_TOKEN=${ghcr_token_q} bash -s" <<'EOF'
+          set -euo pipefail
+
+          if [ ! -f "$DEPLOY_PATH/shared/.env" ]; then
+            echo "Missing required file: $DEPLOY_PATH/shared/.env" >&2
+            exit 1
+          fi
+
+          mkdir -p "$DEPLOY_PATH/shared/storage"
+
+          if docker info >/dev/null 2>&1; then
+            docker_raw() {
+              docker "$@"
+            }
+
+            docker_login() {
+              printf '%s' "$GHCR_DEPLOY_TOKEN" | docker_raw login ghcr.io -u "$GHCR_DEPLOY_USERNAME" --password-stdin
+            }
+          elif sudo -n docker info >/dev/null 2>&1; then
+            docker_raw() {
+              sudo -n docker "$@"
+            }
+
+            docker_login() {
+              printf '%s' "$GHCR_DEPLOY_TOKEN" | docker_raw login ghcr.io -u "$GHCR_DEPLOY_USERNAME" --password-stdin
+            }
+          else
+            echo "Docker is not accessible for the deploy user. Grant docker group access or passwordless sudo." >&2
+            exit 1
+          fi
+
+          docker_login
+          docker_raw pull "$IMAGE_REF"
+          docker_raw run --rm \
+            --env-file "$DEPLOY_PATH/shared/.env" \
+            -v "$DEPLOY_PATH/shared/storage:/var/www/html/backend/storage" \
+            "$IMAGE_REF" \
+            php artisan migrate --force
+
+          docker_raw rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker_raw run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --env-file "$DEPLOY_PATH/shared/.env" \
+            -p "${WEB_PUBLISHED_PORT}:80" \
+            -v "$DEPLOY_PATH/shared/storage:/var/www/html/backend/storage" \
+            "$IMAGE_REF"
+
+          if ! docker_raw inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            docker_raw ps -a --filter "name=^/${CONTAINER_NAME}$"
+            echo "Expected container '$CONTAINER_NAME' was not created." >&2
+            exit 1
+          fi
+
+          if [ "$(docker_raw inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
+            docker_raw ps -a --filter "name=^/${CONTAINER_NAME}$"
+            docker_raw logs --tail 100 "$CONTAINER_NAME" || true
+            echo "Web container is not running after deployment." >&2
+            exit 1
+          fi
+
+          if ! docker_raw port "$CONTAINER_NAME" 80/tcp | grep -q ":${WEB_PUBLISHED_PORT}$"; then
+            docker_raw port "$CONTAINER_NAME"
+            echo "Container port mapping does not expose the expected WEB_PUBLISHED_PORT." >&2
+            exit 1
+          fi
+
+          for _ in $(seq 1 20); do
+            health_status="$(docker_raw inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$CONTAINER_NAME")"
+            if [ "$health_status" = "healthy" ]; then
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$(docker_raw inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_NAME")" != "healthy" ]; then
+            docker_raw logs --tail 100 "$CONTAINER_NAME" || true
+            echo "Container healthcheck did not become healthy." >&2
+            exit 1
+          fi
+
+          health_status_code="$(docker_raw exec "$CONTAINER_NAME" sh -lc "curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1/health")"
+          root_status_code="$(docker_raw exec "$CONTAINER_NAME" sh -lc "curl -sS -o /tmp/root.html -w '%{http_code}' http://127.0.0.1/")"
+          spa_status_code="$(docker_raw exec "$CONTAINER_NAME" sh -lc "curl -sS -o /tmp/spa.html -w '%{http_code}' http://127.0.0.1/admin/orders")"
+
+          if [ "$health_status_code" != "200" ]; then
+            docker_raw exec "$CONTAINER_NAME" cat /tmp/health.json || true
+            echo "Health endpoint did not return HTTP 200." >&2
+            exit 1
+          fi
+
+          if [ "$root_status_code" != "200" ]; then
+            docker_raw exec "$CONTAINER_NAME" cat /tmp/root.html || true
+            echo "Root endpoint did not return HTTP 200." >&2
+            exit 1
+          fi
+
+          if [ "$spa_status_code" != "200" ]; then
+            docker_raw exec "$CONTAINER_NAME" cat /tmp/spa.html || true
+            echo "SPA deep-link endpoint did not return HTTP 200." >&2
+            exit 1
+          fi
+
+          if ! docker_raw exec "$CONTAINER_NAME" sh -lc "grep -Eiq '<!doctype html|<html' /tmp/root.html"; then
+            docker_raw exec "$CONTAINER_NAME" head -n 20 /tmp/root.html || true
+            echo "Root endpoint is not serving HTML." >&2
+            exit 1
+          fi
+
+          if ! docker_raw exec "$CONTAINER_NAME" sh -lc "grep -Eiq '<!doctype html|<html' /tmp/spa.html"; then
+            docker_raw exec "$CONTAINER_NAME" head -n 20 /tmp/spa.html || true
+            echo "SPA deep-link endpoint is not serving HTML." >&2
+            exit 1
+          fi
+
+          docker_raw ps --filter "name=^/${CONTAINER_NAME}$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+          EOF
