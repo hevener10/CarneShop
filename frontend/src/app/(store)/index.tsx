@@ -58,8 +58,8 @@ export default function StoreHome() {
   };
 
   const handleWhatsApp = () => {
-    if (store?.whatsapp_link) {
-      Linking.openURL(store.whatsapp_link);
+    if (store?.whatsapp) {
+      Linking.openURL(store.whatsapp);
     }
   };
 
